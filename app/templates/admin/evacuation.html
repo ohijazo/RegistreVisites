@@ -32,7 +32,7 @@
 
         @media print {
             body { padding: 1cm; }
-            @page { margin: 1cm; size: A4 portrait; }
+            @page { margin: 1cm; size: A4 landscape; }
         }
         @media screen {
             .no-screen { display: none; }
@@ -73,6 +73,7 @@
                 <th>Nom i cognoms</th>
                 <th>Empresa</th>
                 <th>Departament</th>
+                <th>Motiu</th>
                 <th>Entrada</th>
                 <th>Temps dins</th>
                 <th>Telèfon</th>
@@ -89,6 +90,7 @@
                 <td><strong>{{ visit.first_name }} {{ visit.last_name }}</strong></td>
                 <td>{{ visit.company }}</td>
                 <td>{{ visit.department.name_ca if visit.department else '—' }}</td>
+                <td>{{ visit.visit_reason }}</td>
                 <td>{{ visit.checked_in_at.strftime('%H:%M') }}</td>
                 <td>{{ hours }}h {{ mins }}min</td>
                 <td>{{ visit.phone or '—' }}</td>

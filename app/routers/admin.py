@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta, date
 from fastapi import APIRouter, Request, Depends, Form, Query, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, func, and_, or_, text
+from sqlalchemy import select, func, and_, or_, text, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from jose import jwt
@@ -99,6 +99,69 @@ async def help_page(
     return templates.TemplateResponse(request, "admin/help.html", ctx)
 
 
+# ── Audit logs ───────────────────────────────────────────
+
+@router.get("/audit-logs", response_class=HTMLResponse)
+async def audit_logs_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+    date_from: str = "",
+    date_to: str = "",
+    action: str = "",
+):
+    q = select(AuditLog).options(selectinload(AuditLog.admin)).order_by(AuditLog.created_at.desc())
+
+    filters_list = []
+    if date_from:
+        filters_list.append(AuditLog.created_at >= datetime.combine(date.fromisoformat(date_from), datetime.min.time(), tzinfo=timezone.utc))
+    if date_to:
+        filters_list.append(AuditLog.created_at < datetime.combine(date.fromisoformat(date_to) + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc))
+    if action:
+        filters_list.append(AuditLog.action == action)
+    if filters_list:
+        q = q.where(and_(*filters_list))
+
+    result = await db.execute(q.limit(500))
+    logs = result.scalars().all()
+
+    ctx = _admin_context(admin)
+    ctx["logs"] = logs
+    ctx["filters"] = {"date_from": date_from, "date_to": date_to, "action": action}
+    return templates.TemplateResponse(request, "admin/audit_logs.html", context=ctx)
+
+
+# ── Checkout massiu ──────────────────────────────────────
+
+@router.post("/bulk-checkout")
+async def bulk_checkout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    result = await db.execute(
+        select(Visit).where(Visit.checked_out_at.is_(None))
+    )
+    active_visits = result.scalars().all()
+    count = len(active_visits)
+
+    for visit in active_visits:
+        visit.checked_out_at = datetime.now(timezone.utc)
+        visit.checkout_method = "manual"
+
+    audit = AuditLog(
+        admin_id=admin.id,
+        visit_id=None,
+        action="bulk_checkout",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({"count": count}),
+    )
+    db.add(audit)
+    await db.commit()
+
+    return RedirectResponse("/admin/", status_code=302)
+
+
 # ── Llista d'evacuació ───────────────────────────────────
 
 @router.get("/evacuation", response_class=HTMLResponse)
@@ -142,6 +205,15 @@ async def login_submit(
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(password, user.password_hash):
+        # Registrar login fallit
+        audit = AuditLog(
+            admin_id=user.id if user else None,
+            action="failed_login",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({"email": email}),
+        )
+        db.add(audit)
+        await db.commit()
         return templates.TemplateResponse(request, "admin/login.html", context={
             "error": "Credencials incorrectes.",
         })
@@ -394,7 +466,41 @@ async def visits_list(
     return templates.TemplateResponse(request, "admin/visits.html", context=ctx)
 
 
-# ── Exportació (ABANS de /visits/{visit_id} per evitar conflicte de rutes) ──
+# ── Impressió i exportació (ABANS de /visits/{visit_id} per evitar conflicte de rutes) ──
+
+@router.get("/visits/print", response_class=HTMLResponse)
+async def print_visits(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+    date_from: str = "",
+    date_to: str = "",
+    company: str = "",
+    dept_id: str = "",
+    name: str = "",
+    status: str = "",
+):
+    d_from = date.fromisoformat(date_from) if date_from else None
+    d_to = date.fromisoformat(date_to) if date_to else None
+
+    visits, _ = await _get_filtered_visits(
+        db, d_from, d_to, company or None, dept_id or None, name or None, status or None,
+        limit=500, offset=0,
+    )
+
+    ctx = _admin_context(admin)
+    ctx.update({
+        "visits": visits,
+        "filters": {
+            "date_from": date_from,
+            "date_to": date_to,
+            "company": company,
+            "name": name,
+            "status": status,
+        },
+    })
+    return templates.TemplateResponse(request, "admin/visits_print.html", context=ctx)
+
 
 @router.get("/visits/export")
 async def export_visits(
@@ -543,7 +649,12 @@ async def delete_visit(
     if not visit:
         return {"error": "Visita no trobada."}
 
-    # Auditoria abans d'eliminar (visit_id=None perquè la visita s'eliminarà)
+    # Eliminar audit logs associats a aquesta visita
+    await db.execute(
+        delete(AuditLog).where(AuditLog.visit_id == visit_id)
+    )
+
+    # Auditoria de l'eliminació (visit_id=None perquè la visita s'eliminarà)
     audit = AuditLog(
         admin_id=admin.id,
         visit_id=None,

@@ -1,0 +1,88 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Registre d'auditoria{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">Registre d'auditoria</h1>
+
+<!-- Filtres -->
+<div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+    <form method="GET" action="/admin/audit-logs" class="flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Data des de</label>
+            <input type="date" name="date_from" value="{{ filters.date_from or '' }}"
+                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Data fins a</label>
+            <input type="date" name="date_to" value="{{ filters.date_to or '' }}"
+                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Acció</label>
+            <select name="action" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Totes</option>
+                <option value="view_id_document" {% if filters.action == 'view_id_document' %}selected{% endif %}>Veure DNI</option>
+                <option value="manual_checkout" {% if filters.action == 'manual_checkout' %}selected{% endif %}>Sortida manual</option>
+                <option value="delete_visit" {% if filters.action == 'delete_visit' %}selected{% endif %}>Eliminar visita</option>
+                <option value="bulk_checkout" {% if filters.action == 'bulk_checkout' %}selected{% endif %}>Checkout massiu</option>
+                <option value="failed_login" {% if filters.action == 'failed_login' %}selected{% endif %}>Login fallit</option>
+            </select>
+        </div>
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+            Filtrar
+        </button>
+        <a href="/admin/audit-logs" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium transition">
+            Netejar
+        </a>
+    </form>
+</div>
+
+<!-- Resultats -->
+<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200 text-sm text-gray-500">
+        {{ logs|length }} registres
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600 text-xs uppercase">
+                <tr>
+                    <th class="px-5 py-3 text-left">Data i hora</th>
+                    <th class="px-5 py-3 text-left">Usuari</th>
+                    <th class="px-5 py-3 text-left">Acció</th>
+                    <th class="px-5 py-3 text-left">Detall</th>
+                    <th class="px-5 py-3 text-left">IP</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for log in logs %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-3 text-gray-600">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                    <td class="px-5 py-3 font-medium text-gray-800">{{ log.admin.name if log.admin else '—' }}</td>
+                    <td class="px-5 py-3">
+                        {% if log.action == 'view_id_document' %}
+                        <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">Veure DNI</span>
+                        {% elif log.action == 'manual_checkout' %}
+                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">Sortida manual</span>
+                        {% elif log.action == 'delete_visit' %}
+                        <span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">Eliminar visita</span>
+                        {% elif log.action == 'bulk_checkout' %}
+                        <span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Checkout massiu</span>
+                        {% elif log.action == 'failed_login' %}
+                        <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">Login fallit</span>
+                        {% else %}
+                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{{ log.action }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-3 text-gray-500 text-xs max-w-xs truncate" title="{{ log.detail or '' }}">{{ log.detail or '—' }}</td>
+                    <td class="px-5 py-3 text-gray-400 text-xs">{{ log.ip_address or '—' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not logs %}
+                <tr><td colspan="5" class="px-5 py-8 text-center text-gray-400">Sense registres</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

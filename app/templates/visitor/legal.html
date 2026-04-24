@@ -69,7 +69,8 @@
             <button type="submit" id="btn-submit" disabled
                     onclick="return prepareSubmit()"
                     class="touch-btn flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-lg transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed">
-                {{ t('btn_submit') }}
+                <span id="btn-text">{{ t('btn_submit') }}</span>
+                <span id="btn-spinner" class="hidden">⏳</span>
             </button>
         </div>
     </form>
@@ -149,6 +150,19 @@ canvas.addEventListener('touchmove', draw, {passive: false});
 canvas.addEventListener('touchend', stopDraw, {passive: false});
 
 function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasSigned = false; updateState(); }
-function prepareSubmit() { if (!hasSigned) return false; document.getElementById('signature-data').value = canvas.toDataURL('image/png'); return true; }
+function prepareSubmit() {
+    if (!hasSigned) return false;
+    try {
+        document.getElementById('signature-data').value = canvas.toDataURL('image/png');
+    } catch(e) {
+        return false;
+    }
+    // Desactivar botó per evitar doble clic
+    var btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    document.getElementById('btn-text').classList.add('hidden');
+    document.getElementById('btn-spinner').classList.remove('hidden');
+    return true;
+}
 </script>
 {% endblock %}

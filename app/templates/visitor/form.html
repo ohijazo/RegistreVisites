@@ -58,7 +58,7 @@
             <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_id_document') }} <span class="text-red-500">*</span>
             </label>
-            <input type="text" name="id_document" autocomplete="off" required maxlength="50"
+            <input type="text" name="id_document" autocomplete="off" required maxlength="50" style="text-transform: uppercase;"
                    value="{{ form_data.get('id_document', '') }}"
                    class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('id_document') %}border-red-500{% else %}border-gray-300{% endif %}">
             {% if errors.get('id_document') %}
@@ -103,7 +103,7 @@
             <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_phone') }}
             </label>
-            <input type="tel" name="phone" autocomplete="off" maxlength="30"
+            <input type="tel" name="phone" autocomplete="off" maxlength="30" inputmode="tel" pattern="[\d\s\+\-\(\)]*"
                    value="{{ form_data.get('phone', '') }}"
                    class="touch-input w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
         </div>
@@ -114,9 +114,10 @@
                class="touch-btn flex-1 flex items-center justify-center bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold transition">
                 {{ t('btn_back') }}
             </a>
-            <button type="submit"
+            <button type="submit" id="btn-submit"
                     class="touch-btn flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-lg transition shadow-md">
-                {{ t('btn_next') }}
+                <span id="btn-text">{{ t('btn_next') }}</span>
+                <span id="btn-spinner" class="hidden">⏳</span>
             </button>
         </div>
     </form>
@@ -152,6 +153,10 @@ function validateForm() {
         window.scrollTo({top: 0, behavior: 'smooth'});
         return false;
     }
+    // Desactivar botó per evitar doble clic
+    document.getElementById('btn-submit').disabled = true;
+    document.getElementById('btn-text').classList.add('hidden');
+    document.getElementById('btn-spinner').classList.remove('hidden');
     return true;
 }
 </script>

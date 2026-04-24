@@ -55,6 +55,8 @@
   "checkout_dni_placeholder": "ID card / Passport",
   "checkout_now": "Register exit now",
 
+  "error_system_unavailable": "The registration system is not available at this time.",
+  "error_contact_reception": "Please contact reception.",
   "error_required": "This field is required.",
   "error_invalid": "Invalid format.",
   "error_generic": "An error occurred. Please try again.",

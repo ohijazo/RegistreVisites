@@ -55,6 +55,8 @@
   "checkout_dni_placeholder": "Carte d'identité / Passeport",
   "checkout_now": "Enregistrer la sortie maintenant",
 
+  "error_system_unavailable": "Le système d'enregistrement n'est pas disponible pour le moment.",
+  "error_contact_reception": "Veuillez contacter la réception.",
   "error_required": "Ce champ est obligatoire.",
   "error_invalid": "Format non valide.",
   "error_generic": "Une erreur s'est produite. Veuillez réessayer.",

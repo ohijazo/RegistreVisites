@@ -10,6 +10,7 @@ from app.db.database import get_db
 from app.db.models import Visit
 from app.services.crypto import decrypt
 from app.services.i18n import t, DEFAULT_LANG
+from app.services.rate_limit import limiter
 
 router = APIRouter(prefix="/checkout")
 templates = Jinja2Templates(directory="app/templates")
@@ -35,6 +36,7 @@ async def checkout_done(request: Request):
 
 
 @router.post("/dni")
+@limiter.limit("10/minute")
 async def checkout_dni(
     request: Request,
     id_document: str = Form(...),

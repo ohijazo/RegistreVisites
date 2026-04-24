@@ -60,10 +60,21 @@ async def register_form(
     if lang not in SUPPORTED_LANGS:
         return RedirectResponse("/ca/", status_code=302)
 
-    result = await db.execute(
+    # Verificar que hi ha departaments i document legal actiu
+    dept_result = await db.execute(
         select(Department).where(Department.active.is_(True)).order_by(Department.order)
     )
-    departments = result.scalars().all()
+    departments = dept_result.scalars().all()
+
+    legal_result = await db.execute(
+        select(LegalDocument).where(LegalDocument.active.is_(True))
+    )
+    legal_doc = legal_result.scalar_one_or_none()
+
+    if not departments or not legal_doc:
+        ctx = _lang_context(lang)
+        ctx["error"] = t(lang, "error_system_unavailable")
+        return templates.TemplateResponse(request, "visitor/unavailable.html", ctx)
 
     ctx = _lang_context(lang)
     ctx["departments"] = departments
@@ -107,7 +118,7 @@ async def submit_register(
         "first_name": first_name.strip(),
         "last_name": last_name.strip(),
         "company": company.strip().upper(),
-        "id_document": id_document.strip(),
+        "id_document": id_document.strip().upper(),
         "department_id": department_id,
         "visit_reason": visit_reason.strip(),
         "phone": phone.strip() if phone else "",
@@ -246,5 +257,5 @@ async def confirmation_page(
     ctx = _lang_context(lang)
     ctx["visit"] = visit
     ctx["qr_b64"] = qr_b64
-    ctx["kiosk_reset_seconds"] = settings.KIOSK_RESET_SECONDS
+    ctx["kiosk_reset_seconds"] = settings.KIOSK_CONFIRM_SECONDS
     return templates.TemplateResponse(request, "visitor/confirmation.html", ctx)

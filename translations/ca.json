@@ -55,6 +55,8 @@
   "checkout_dni_placeholder": "DNI / NIE / Passaport",
   "checkout_now": "Registrar sortida ara",
 
+  "error_system_unavailable": "El sistema de registre no està disponible en aquest moment.",
+  "error_contact_reception": "Si us plau, contacteu amb recepció.",
   "error_required": "Aquest camp és obligatori.",
   "error_invalid": "Format no vàlid.",
   "error_generic": "S'ha produït un error. Torneu-ho a intentar.",

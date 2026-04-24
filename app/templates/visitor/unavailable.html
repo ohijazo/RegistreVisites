@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('error_system_unavailable') }}{% endblock %}
+
+{% block body %}
+<div class="flex flex-col items-center justify-center min-h-screen px-4 text-center">
+    <div class="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full">
+        <div class="text-orange-500 text-5xl mb-4">&#9888;</div>
+        <h1 class="text-xl font-bold text-gray-800 mb-4">{{ t('error_system_unavailable') }}</h1>
+        <p class="text-gray-500 mb-6">{{ t('error_contact_reception') }}</p>
+        <a href="/{{ lang }}/action"
+           class="inline-block bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-6 py-3 font-medium transition">
+            {{ t('btn_back') }}
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -9,7 +9,8 @@ class Settings(BaseSettings):
 
     SESSION_HOURS: int = 8
     EXIT_TOKEN_HOURS: int = 8
-    KIOSK_RESET_SECONDS: int = 30
+    KIOSK_RESET_SECONDS: int = 60
+    KIOSK_CONFIRM_SECONDS: int = 15
     MAX_VISIT_HOURS_WARN: int = 4
     MAX_VISIT_HOURS_ALERT: int = 8
 
