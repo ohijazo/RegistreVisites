@@ -15,9 +15,9 @@
     </h1>
 
     <div class="flex flex-col gap-5 w-full max-w-md">
-        <!-- Checkin -->
+        <!-- Checkin (principal) -->
         <a href="/{{ lang }}/register"
-           class="touch-btn flex items-center gap-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xl font-semibold py-8 px-6 transition shadow-md">
+           class="touch-btn flex items-center gap-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-2xl font-bold py-8 px-6 transition shadow-lg ring-4 ring-blue-200">
             <svg class="w-10 h-10 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
             </svg>
@@ -27,9 +27,9 @@
             </div>
         </a>
 
-        <!-- Checkout -->
+        <!-- Checkout (secundari) -->
         <a href="/{{ lang }}/checkout"
-           class="touch-btn flex items-center gap-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xl font-semibold py-8 px-6 transition shadow-md">
+           class="touch-btn flex items-center gap-4 bg-gray-500 hover:bg-gray-600 text-white rounded-xl text-xl font-semibold py-7 px-6 transition shadow-md">
             <svg class="w-10 h-10 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
             </svg>
@@ -42,7 +42,8 @@
 
     <!-- Tornar a selecció idioma -->
     <div class="mt-10">
-        <a href="/{{ lang }}/" class="text-gray-400 hover:text-gray-600 text-sm">
+        <a href="/{{ lang }}/"
+           class="inline-block bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-lg font-medium px-6 py-3 transition">
             {{ t('btn_back') }}
         </a>
     </div>

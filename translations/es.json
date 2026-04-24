@@ -11,6 +11,7 @@
   "action_checkout": "Registrar salida",
   "action_checkout_desc": "Ya me voy y quiero registrar la salida",
 
+  "form_step": "Paso",
   "form_title": "Registro de visita",
   "field_first_name": "Nombre",
   "field_last_name": "Apellidos",
@@ -27,7 +28,7 @@
   "legal_title": "Información y aceptación",
   "legal_scroll_hint": "Desplácese hasta el final para continuar",
   "legal_check_rules": "He leído y acepto las normas de acceso y seguridad de las instalaciones.",
-  "legal_check_rgpd": "He sido informado/a del tratamiento de mis datos personales según el RGPD y la LOPDGDD, y acepto que mis datos sean tratados para la gestión del acceso a las instalaciones.",
+  "legal_check_rgpd": "He sido informado/a y acepto el tratamiento de mis datos personales.",
   "legal_signature": "Firma",
   "legal_signature_clear": "Borrar",
   "legal_signature_hint": "Firme con el dedo o el ratón",

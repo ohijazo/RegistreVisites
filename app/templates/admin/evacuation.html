@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <title>LLISTA D'EVACUACIÓ - {{ settings.COMPANY_NAME }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; padding: 1.5cm; font-size: 11pt; }
+
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 3px solid #c00; padding-bottom: 10px; margin-bottom: 15px;
+        }
+        .header h1 { color: #c00; font-size: 22pt; }
+        .header .meta { text-align: right; font-size: 9pt; color: #555; }
+
+        .alert-box {
+            background: #fff3cd; border: 2px solid #c00; padding: 10px 15px;
+            margin-bottom: 15px; font-weight: bold; font-size: 13pt; text-align: center;
+        }
+
+        .summary { margin-bottom: 15px; font-size: 12pt; }
+        .summary strong { font-size: 16pt; color: #c00; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        th { background: #333; color: white; padding: 8px 10px; text-align: left; font-size: 9pt; text-transform: uppercase; }
+        td { padding: 7px 10px; border-bottom: 1px solid #ddd; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        tr.alert { background: #ffe0e0; }
+
+        .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 8pt; color: #999; }
+
+        @media print {
+            body { padding: 1cm; }
+            @page { margin: 1cm; size: A4 portrait; }
+        }
+        @media screen {
+            .no-screen { display: none; }
+            .print-btn {
+                position: fixed; top: 20px; right: 20px; z-index: 100;
+                background: #c00; color: white; border: none; padding: 12px 24px;
+                font-size: 14pt; font-weight: bold; border-radius: 8px; cursor: pointer;
+            }
+            .print-btn:hover { background: #a00; }
+        }
+        @media print { .print-btn { display: none; } }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">IMPRIMIR</button>
+
+    <div class="header">
+        <div>
+            <h1>LLISTA D'EVACUACIÓ</h1>
+            <p>{{ settings.COMPANY_NAME }}</p>
+        </div>
+        <div class="meta">
+            <p>Data: {{ now.strftime('%d/%m/%Y') }}</p>
+            <p>Hora: {{ now.strftime('%H:%M:%S') }}</p>
+            <p>Generada per: {{ admin.name }}</p>
+        </div>
+    </div>
+
+    <div class="alert-box">
+        PERSONES A LES INSTAL·LACIONS EN AQUEST MOMENT: <strong>{{ active_visits|length }}</strong>
+    </div>
+
+    {% if active_visits %}
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Nom i cognoms</th>
+                <th>Empresa</th>
+                <th>Departament</th>
+                <th>Entrada</th>
+                <th>Temps dins</th>
+                <th>Telèfon</th>
+                <th>Verificat</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for visit in active_visits %}
+            {% set minutes = ((now - visit.checked_in_at).total_seconds() / 60)|int %}
+            {% set hours = minutes // 60 %}
+            {% set mins = minutes % 60 %}
+            <tr{% if hours >= 8 %} class="alert"{% endif %}>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ visit.first_name }} {{ visit.last_name }}</strong></td>
+                <td>{{ visit.company }}</td>
+                <td>{{ visit.department.name_ca if visit.department else '—' }}</td>
+                <td>{{ visit.checked_in_at.strftime('%H:%M') }}</td>
+                <td>{{ hours }}h {{ mins }}min</td>
+                <td>{{ visit.phone or '—' }}</td>
+                <td style="width: 60px;">&#9744;</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 30px; font-size: 14pt; color: #999;">
+        No hi ha visitants a les instal·lacions en aquest moment.
+    </p>
+    {% endif %}
+
+    <div class="footer">
+        <p>Document generat automàticament pel Sistema de Registre de Visites. {{ settings.COMPANY_NAME }} — {{ now.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+    </div>
+
+    <script>
+        // Imprimir automàticament en obrir
+        window.addEventListener('load', function() { window.print(); });
+    </script>
+</body>
+</html>

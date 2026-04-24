@@ -18,6 +18,7 @@ from app.services.rate_limit import limiter
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+templates.env.filters["lang_attr"] = lambda obj, attr_prefix, lang: getattr(obj, f"{attr_prefix}{lang}", getattr(obj, f"{attr_prefix}ca", ""))
 
 
 def _lang_context(lang: str) -> dict:
@@ -46,9 +47,8 @@ async def action_page(lang: str, request: Request):
 async def checkout_lang(lang: str, request: Request):
     if lang not in SUPPORTED_LANGS:
         return RedirectResponse("/ca/", status_code=302)
-    ctx = _lang_context(lang)
-    ctx["error"] = None
-    return templates.TemplateResponse(request, "checkout/scan.html", ctx)
+    request.session["checkout_lang"] = lang
+    return RedirectResponse("/checkout", status_code=302)
 
 
 @router.get("/{lang}/register", response_class=HTMLResponse)
@@ -106,7 +106,7 @@ async def submit_register(
     form_data = {
         "first_name": first_name.strip(),
         "last_name": last_name.strip(),
-        "company": company.strip(),
+        "company": company.strip().upper(),
         "id_document": id_document.strip(),
         "department_id": department_id,
         "visit_reason": visit_reason.strip(),

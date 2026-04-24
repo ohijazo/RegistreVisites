@@ -11,6 +11,7 @@
   "action_checkout": "Register exit",
   "action_checkout_desc": "I'm leaving and want to register my exit",
 
+  "form_step": "Step",
   "form_title": "Visitor registration",
   "field_first_name": "First name",
   "field_last_name": "Last name",
@@ -27,7 +28,7 @@
   "legal_title": "Information and acceptance",
   "legal_scroll_hint": "Scroll to the bottom to continue",
   "legal_check_rules": "I have read and accept the facility access and security rules.",
-  "legal_check_rgpd": "I have been informed about the processing of my personal data in accordance with the GDPR, and I accept that my data will be processed for facility access management.",
+  "legal_check_rgpd": "I have been informed and I accept the processing of my personal data.",
   "legal_signature": "Signature",
   "legal_signature_clear": "Clear",
   "legal_signature_hint": "Sign with your finger or mouse",

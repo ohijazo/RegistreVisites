@@ -11,6 +11,7 @@
   "action_checkout": "Registrar sortida",
   "action_checkout_desc": "Ja marxo i vull registrar la sortida",
 
+  "form_step": "Pas",
   "form_title": "Registre de visita",
   "field_first_name": "Nom",
   "field_last_name": "Cognoms",
@@ -27,7 +28,7 @@
   "legal_title": "Informació i acceptació",
   "legal_scroll_hint": "Desplaceu-vos fins al final per continuar",
   "legal_check_rules": "He llegit i accepto les normes d'accés i seguretat de les instal·lacions.",
-  "legal_check_rgpd": "He estat informat/da del tractament de les meves dades personals segons el RGPD i la LOPDGDD, i accepto que les meves dades siguin tractades per a la gestió de l'accés a les instal·lacions.",
+  "legal_check_rgpd": "He estat informat/da i accepto el tractament de les meves dades personals.",
   "legal_signature": "Signatura",
   "legal_signature_clear": "Esborrar",
   "legal_signature_hint": "Signeu amb el dit o el ratolí",

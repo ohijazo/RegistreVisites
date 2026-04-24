@@ -1,0 +1,20 @@
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
+        <p class="text-sm text-gray-500">Visites actives (ara)</p>
+        <p class="text-3xl font-bold text-gray-800" id="stat-active-count">{{ active_count }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
+        <p class="text-sm text-gray-500">Entrades avui</p>
+        <p class="text-3xl font-bold text-gray-800" id="stat-entries-count">{{ entries_today }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-orange-500">
+        <p class="text-sm text-gray-500">Sortides avui</p>
+        <p class="text-3xl font-bold text-gray-800">{{ exits_today }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
+        <p class="text-sm text-gray-500">Durada mitjana avui</p>
+        <p class="text-3xl font-bold text-gray-800">
+            {% if avg_duration %}{{ (avg_duration // 60)|int }}h {{ (avg_duration % 60)|int }}min{% else %}—{% endif %}
+        </p>
+    </div>
+</div>

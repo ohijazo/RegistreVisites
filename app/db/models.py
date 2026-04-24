@@ -58,7 +58,7 @@ class Visit(Base):
     __tablename__ = "visits"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"))
+    location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=True)
     location = relationship("Location", back_populates="visits")
 
     # Dades personals

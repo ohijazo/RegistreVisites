@@ -2,10 +2,56 @@
 
 {% block title %}Detall visita{% endblock %}
 
+{% block extra_head %}
+<style>
+@media print {
+    /* Amagar elements no imprimibles */
+    nav, aside, #sidebar, #btn-actions, #id-doc-container, #id-confirm-modal,
+    .no-print, button, a[href] { display: none !important; }
+
+    /* Layout d'impressió */
+    body { background: white !important; font-size: 12pt; }
+    main { padding: 0 !important; max-width: 100% !important; }
+    .print-header { display: block !important; }
+    .bg-white { box-shadow: none !important; border: 1px solid #ddd !important; }
+    .grid { display: block !important; }
+    .grid > div { margin-bottom: 1rem; page-break-inside: avoid; }
+
+    @page {
+        margin: 1.5cm;
+        size: A4 portrait;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="flex items-center gap-3 mb-6">
-    <a href="/admin/visits" class="text-blue-600 hover:text-blue-800 text-sm">← Tornar al llistat</a>
-    <h1 class="text-2xl font-bold text-gray-800">Visita #{{ visit.id|string|truncate(8, True, '') }}</h1>
+<!-- Capçalera d'impressió (només visible al imprimir) -->
+<div class="print-header hidden mb-6">
+    <div class="flex items-center justify-between border-b-2 border-gray-800 pb-3 mb-4">
+        <div>
+            <h1 class="text-xl font-bold">{{ settings.COMPANY_NAME }}</h1>
+            <p class="text-sm text-gray-600">Registre de visites</p>
+        </div>
+        <div class="text-right text-sm text-gray-600">
+            <p>Data impressió: {{ now.strftime('%d/%m/%Y %H:%M') }}</p>
+            <p>ID: {{ visit.id }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="flex items-center justify-between mb-6 no-print">
+    <div class="flex items-center gap-3">
+        <a href="/admin/visits" class="text-blue-600 hover:text-blue-800 text-sm">← Tornar al llistat</a>
+        <h1 class="text-2xl font-bold text-gray-800">Visita #{{ visit.id|string|truncate(8, True, '') }}</h1>
+    </div>
+    <button onclick="window.print()"
+            class="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+        </svg>
+        Imprimir / PDF
+    </button>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -99,7 +145,7 @@
                 <dt class="text-gray-500 mb-2">Signatura:</dt>
                 <dd>
                     <img src="data:image/png;base64,{{ visit.signature | b64encode }}"
-                         alt="Signatura" class="border border-gray-200 rounded-lg bg-white max-w-full">
+                         alt="Signatura" class="border border-gray-200 rounded-lg bg-white max-w-full" style="max-height: 100px;">
                 </dd>
             </div>
             {% endif %}
@@ -107,13 +153,13 @@
     </div>
 
     <!-- Document d'identitat -->
-    <div class="bg-white rounded-xl shadow-sm p-6">
+    <div class="bg-white rounded-xl shadow-sm p-6 no-print">
         <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Document d'identitat</h2>
 
         <div id="id-doc-container">
             <button onclick="document.getElementById('id-confirm-modal').classList.remove('hidden')"
                     class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
-                ⚠ Veure DNI
+                Veure DNI
             </button>
             <p class="text-xs text-gray-400 mt-2">Aquesta acció quedarà registrada.</p>
         </div>
@@ -126,7 +172,7 @@
 </div>
 
 <!-- Accions -->
-<div class="mt-6 flex gap-3">
+<div class="mt-6 flex gap-3 no-print" id="btn-actions">
     {% if not visit.checked_out_at and admin.role in ['admin', 'receptionist'] %}
     <form method="POST" action="/admin/visits/{{ visit.id }}/checkout">
         <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition">
@@ -186,14 +232,12 @@ async function viewIdDocument() {
         return;
     }
 
-    // Mostrar el DNI
     document.getElementById('id-confirm-modal').classList.add('hidden');
     document.getElementById('id-doc-container').classList.add('hidden');
     const valueEl = document.getElementById('id-doc-value');
     valueEl.classList.remove('hidden');
     valueEl.querySelector('p').textContent = data.id_document;
 
-    // Amagar als 10 segons
     setTimeout(function() {
         valueEl.classList.add('hidden');
         document.getElementById('id-doc-container').classList.remove('hidden');

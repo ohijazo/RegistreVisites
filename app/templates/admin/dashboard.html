@@ -5,40 +5,85 @@
 {% block content %}
 <h1 class="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
 
+<!-- Notificació de canvi -->
+<div id="change-alert" class="hidden bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+    <span id="change-msg"></span>
+    <button onclick="this.parentElement.classList.add('hidden')" class="text-green-700 font-bold text-lg">&times;</button>
+</div>
+
 <!-- Targetes de resum -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
-        <p class="text-sm text-gray-500">Visites actives (ara)</p>
-        <p class="text-3xl font-bold text-gray-800">{{ active_count }}</p>
-    </div>
-    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
-        <p class="text-sm text-gray-500">Entrades avui</p>
-        <p class="text-3xl font-bold text-gray-800">{{ entries_today }}</p>
-    </div>
-    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-orange-500">
-        <p class="text-sm text-gray-500">Sortides avui</p>
-        <p class="text-3xl font-bold text-gray-800">{{ exits_today }}</p>
-    </div>
-    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
-        <p class="text-sm text-gray-500">Durada mitjana avui</p>
-        <p class="text-3xl font-bold text-gray-800">
-            {% if avg_duration %}{{ (avg_duration // 60)|int }}h {{ (avg_duration % 60)|int }}min{% else %}—{% endif %}
-        </p>
-    </div>
+<div id="stats-cards"
+     hx-get="/admin/api/stats-cards"
+     hx-trigger="every 10s"
+     hx-target="#stats-cards"
+     hx-swap="innerHTML">
+    {% include "admin/_stats_cards.html" %}
 </div>
 
 <!-- Taula visites actives -->
 <div class="bg-white rounded-xl shadow-sm overflow-hidden">
     <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
         <h2 class="font-semibold text-gray-800">Visites actives</h2>
-        <span class="text-xs text-gray-400">Actualització automàtica cada 30s</span>
+        <div class="flex items-center gap-3">
+            <a href="/admin/evacuation" target="_blank"
+               class="flex items-center gap-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 rounded-lg font-medium transition"
+               title="Imprimir llista d'evacuació">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Llista evacuació
+            </a>
+        <span class="text-xs text-gray-400" id="last-update"></span>
     </div>
     <div id="active-table"
          hx-get="/admin/api/active-visits"
-         hx-trigger="every 30s"
+         hx-trigger="every 10s"
          hx-target="#active-table"
          hx-swap="innerHTML">
         {% include "admin/_active_visits_table.html" %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    var lastCount = {{ active_count }};
+    var lastEntries = {{ entries_today }};
+
+    // Detectar canvis després de cada actualització HTMX
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target.id === 'stats-cards') {
+            var countEl = document.getElementById('stat-active-count');
+            var entriesEl = document.getElementById('stat-entries-count');
+            if (!countEl || !entriesEl) return;
+
+            var newCount = parseInt(countEl.textContent);
+            var newEntries = parseInt(entriesEl.textContent);
+
+            if (newEntries > lastEntries) {
+                showAlert('Nova visita registrada');
+            } else if (newCount < lastCount) {
+                showAlert('Sortida registrada');
+            }
+
+            lastCount = newCount;
+            lastEntries = newEntries;
+        }
+
+        // Actualitzar timestamp
+        if (e.detail.target.id === 'active-table') {
+            document.getElementById('last-update').textContent = 'Actualitzat: ' + new Date().toLocaleTimeString('ca');
+        }
+    });
+
+    function showAlert(msg) {
+        var el = document.getElementById('change-alert');
+        document.getElementById('change-msg').textContent = msg;
+        el.classList.remove('hidden');
+        setTimeout(function() { el.classList.add('hidden'); }, 8000);
+
+        // So d'alerta (opcional, si el navegador ho permet)
+        try { new Audio('data:audio/wav;base64,UklGRl9vT19teleWQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhQu8+AA==').play(); } catch(e) {}
+    }
+</script>
 {% endblock %}

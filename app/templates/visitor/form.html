@@ -1,109 +1,111 @@
 {% extends "base.html" %}
+{% set kiosk_idle = false %}
 
 {% block title %}{{ t('form_title') }}{% endblock %}
 
 {% block body %}
-<div class="max-w-lg mx-auto px-4 py-6">
+<div class="max-w-2xl mx-auto px-4 py-6">
     <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">{{ t('form_title') }}</h1>
 
-    <div id="js-error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4 {% if not errors %}hidden{% endif %}">
+    <div id="js-error" class="bg-red-100 border-2 border-red-500 text-red-700 px-4 py-4 rounded-lg mb-6 font-semibold {% if not errors %}hidden{% endif %}" role="alert">
         {{ t('validation_error') }}
     </div>
 
-    <form method="POST" action="/{{ lang }}/register" novalidate onsubmit="return validateForm()">
+    <form method="POST" action="/{{ lang }}/register" novalidate autocomplete="off" onsubmit="return validateForm()">
         <!-- Nom -->
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-1">
+        <div class="mb-5">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_first_name') }} <span class="text-red-500">*</span>
             </label>
-            <input type="text" name="first_name" required maxlength="100"
+            <input type="text" name="first_name" autocomplete="off" required maxlength="100"
                    value="{{ form_data.get('first_name', '') }}"
-                   class="touch-input w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('first_name') %}border-red-500{% else %}border-gray-300{% endif %}"
+                   class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('first_name') %}border-red-500{% else %}border-gray-300{% endif %}"
                    autofocus>
             {% if errors.get('first_name') %}
-            <p class="text-red-500 text-sm mt-1">{{ errors['first_name'] }}</p>
+            <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['first_name'] }}</p>
             {% endif %}
         </div>
 
         <!-- Cognoms -->
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-1">
+        <div class="mb-5">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_last_name') }} <span class="text-red-500">*</span>
             </label>
-            <input type="text" name="last_name" required maxlength="150"
+            <input type="text" name="last_name" autocomplete="off" required maxlength="150"
                    value="{{ form_data.get('last_name', '') }}"
-                   class="touch-input w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('last_name') %}border-red-500{% else %}border-gray-300{% endif %}">
+                   class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('last_name') %}border-red-500{% else %}border-gray-300{% endif %}">
             {% if errors.get('last_name') %}
-            <p class="text-red-500 text-sm mt-1">{{ errors['last_name'] }}</p>
+            <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['last_name'] }}</p>
             {% endif %}
         </div>
 
         <!-- Empresa -->
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-1">
+        <div class="mb-5">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_company') }} <span class="text-red-500">*</span>
             </label>
-            <input type="text" name="company" required maxlength="200"
+            <input type="text" name="company" autocomplete="off" required maxlength="200"
                    value="{{ form_data.get('company', '') }}"
-                   class="touch-input w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('company') %}border-red-500{% else %}border-gray-300{% endif %}">
+                   style="text-transform: uppercase;"
+                   class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('company') %}border-red-500{% else %}border-gray-300{% endif %}">
             {% if errors.get('company') %}
-            <p class="text-red-500 text-sm mt-1">{{ errors['company'] }}</p>
+            <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['company'] }}</p>
             {% endif %}
         </div>
 
         <!-- DNI -->
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-1">
+        <div class="mb-5">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_id_document') }} <span class="text-red-500">*</span>
             </label>
-            <input type="text" name="id_document" required maxlength="50"
+            <input type="text" name="id_document" autocomplete="off" required maxlength="50"
                    value="{{ form_data.get('id_document', '') }}"
-                   class="touch-input w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('id_document') %}border-red-500{% else %}border-gray-300{% endif %}">
+                   class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('id_document') %}border-red-500{% else %}border-gray-300{% endif %}">
             {% if errors.get('id_document') %}
-            <p class="text-red-500 text-sm mt-1">{{ errors['id_document'] }}</p>
+            <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['id_document'] }}</p>
             {% endif %}
         </div>
 
         <!-- Departament -->
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-1">
+        <div class="mb-5">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_department') }} <span class="text-red-500">*</span>
             </label>
             <select name="department_id" required
-                    class="touch-input w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                    class="touch-input w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
                 <option value="">{{ t('select_department') }}</option>
                 {% for dept in departments %}
                 <option value="{{ dept.id }}"
                         {% if form_data.get('department_id') == dept.id|string %}selected{% endif %}>
-                    {{ dept['name_' + lang] if dept['name_' + lang] is defined else dept.name_ca }}
+                    {{ dept|lang_attr('name_', lang) }}
                 </option>
                 {% endfor %}
             </select>
             {% if errors.get('department_id') %}
-            <p class="text-red-500 text-sm mt-1">{{ errors['department_id'] }}</p>
+            <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['department_id'] }}</p>
             {% endif %}
         </div>
 
         <!-- Motiu -->
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-1">
+        <div class="mb-5">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_visit_reason') }} <span class="text-red-500">*</span>
             </label>
-            <textarea name="visit_reason" required maxlength="2000" rows="3"
-                      class="touch-input w-full border rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('visit_reason') %}border-red-500{% else %}border-gray-300{% endif %}">{{ form_data.get('visit_reason', '') }}</textarea>
+            <textarea name="visit_reason" required maxlength="2000" rows="1" autocomplete="off"
+                      class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('visit_reason') %}border-red-500{% else %}border-gray-300{% endif %}">{{ form_data.get('visit_reason', '') }}</textarea>
             {% if errors.get('visit_reason') %}
-            <p class="text-red-500 text-sm mt-1">{{ errors['visit_reason'] }}</p>
+            <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['visit_reason'] }}</p>
             {% endif %}
         </div>
 
         <!-- Telèfon -->
         <div class="mb-6">
-            <label class="block text-gray-700 font-medium mb-1">
+            <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_phone') }}
             </label>
-            <input type="tel" name="phone" maxlength="30"
+            <input type="tel" name="phone" autocomplete="off" maxlength="30"
                    value="{{ form_data.get('phone', '') }}"
-                   class="touch-input w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                   class="touch-input w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
         </div>
 
         <!-- Botons -->
@@ -113,7 +115,7 @@
                 {{ t('btn_back') }}
             </a>
             <button type="submit"
-                    class="touch-btn flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition">
+                    class="touch-btn flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-lg transition shadow-md">
                 {{ t('btn_next') }}
             </button>
         </div>
@@ -122,25 +124,24 @@
 
 <script>
 function validateForm() {
-    const required = ['first_name', 'last_name', 'company', 'id_document', 'department_id', 'visit_reason'];
-    const errorMsg = '{{ t("error_required") }}';
-    let hasError = false;
+    var required = ['first_name', 'last_name', 'company', 'id_document', 'department_id', 'visit_reason'];
+    var errorMsg = '{{ t("error_required") }}';
+    var hasError = false;
 
-    // Netejar errors anteriors
-    document.querySelectorAll('.js-field-error').forEach(el => el.remove());
+    document.querySelectorAll('.js-field-error').forEach(function(el) { el.remove(); });
 
     required.forEach(function(name) {
-        const field = document.querySelector('[name="' + name + '"]');
+        var field = document.querySelector('[name="' + name + '"]');
         if (!field) return;
-        const value = field.value.trim();
-        // Treure border vermell anterior
         field.classList.remove('border-red-500');
+        field.classList.add('border-gray-300');
 
-        if (!value) {
+        if (!field.value.trim()) {
             hasError = true;
+            field.classList.remove('border-gray-300');
             field.classList.add('border-red-500');
-            const errEl = document.createElement('p');
-            errEl.className = 'text-red-500 text-sm mt-1 js-field-error';
+            var errEl = document.createElement('p');
+            errEl.className = 'text-red-600 text-sm mt-1 font-semibold js-field-error';
             errEl.textContent = errorMsg;
             field.parentNode.appendChild(errEl);
         }
@@ -151,7 +152,6 @@ function validateForm() {
         window.scrollTo({top: 0, behavior: 'smooth'});
         return false;
     }
-
     return true;
 }
 </script>

@@ -11,6 +11,7 @@
   "action_checkout": "Enregistrer la sortie",
   "action_checkout_desc": "Je pars et je veux enregistrer la sortie",
 
+  "form_step": "Étape",
   "form_title": "Registre de visite",
   "field_first_name": "Prénom",
   "field_last_name": "Nom de famille",
@@ -27,7 +28,7 @@
   "legal_title": "Information et acceptation",
   "legal_scroll_hint": "Faites défiler jusqu'en bas pour continuer",
   "legal_check_rules": "J'ai lu et j'accepte les règles d'accès et de sécurité des installations.",
-  "legal_check_rgpd": "J'ai été informé(e) du traitement de mes données personnelles conformément au RGPD, et j'accepte que mes données soient traitées pour la gestion de l'accès aux installations.",
+  "legal_check_rgpd": "J'ai été informé(e) et j'accepte le traitement de mes données personnelles.",
   "legal_signature": "Signature",
   "legal_signature_clear": "Effacer",
   "legal_signature_hint": "Signez avec le doigt ou la souris",

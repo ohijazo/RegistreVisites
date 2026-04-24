@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta, date
 from fastapi import APIRouter, Request, Depends, Form, Query, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, func, and_, or_, case, text
+from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from jose import jwt
@@ -97,6 +97,27 @@ async def help_page(
 ):
     ctx = _admin_context(admin)
     return templates.TemplateResponse(request, "admin/help.html", ctx)
+
+
+# ── Llista d'evacuació ───────────────────────────────────
+
+@router.get("/evacuation", response_class=HTMLResponse)
+async def evacuation_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    result = await db.execute(
+        select(Visit)
+        .options(selectinload(Visit.department))
+        .where(Visit.checked_out_at.is_(None))
+        .order_by(Visit.checked_in_at.asc())
+    )
+    active_visits = result.scalars().all()
+
+    ctx = _admin_context(admin)
+    ctx["active_visits"] = active_visits
+    return templates.TemplateResponse(request, "admin/evacuation.html", ctx)
 
 
 # ── Login / Logout ───────────────────────────────────────
@@ -241,6 +262,47 @@ async def api_active_visits(
     return templates.TemplateResponse(request, "admin/_active_visits_table.html", context=ctx)
 
 
+@router.get("/api/stats-cards", response_class=HTMLResponse)
+async def api_stats_cards(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    active_result = await db.execute(
+        select(func.count(Visit.id)).where(Visit.checked_out_at.is_(None))
+    )
+    entries_result = await db.execute(
+        select(func.count(Visit.id)).where(Visit.checked_in_at >= today_start)
+    )
+    exits_result = await db.execute(
+        select(func.count(Visit.id)).where(
+            Visit.checked_out_at >= today_start,
+            Visit.checked_out_at.isnot(None),
+        )
+    )
+    avg_result = await db.execute(
+        select(
+            func.avg(func.extract("epoch", Visit.checked_out_at - Visit.checked_in_at) / 60)
+        ).where(
+            Visit.checked_in_at >= today_start,
+            Visit.checked_out_at.isnot(None),
+        )
+    )
+    avg_duration = avg_result.scalar()
+
+    ctx = _admin_context(admin)
+    ctx.update({
+        "active_count": active_result.scalar(),
+        "entries_today": entries_result.scalar(),
+        "exits_today": exits_result.scalar(),
+        "avg_duration": round(avg_duration) if avg_duration else None,
+    })
+    return templates.TemplateResponse(request, "admin/_stats_cards.html", context=ctx)
+
+
 @router.get("/api/stats")
 async def api_stats(
     db: AsyncSession = Depends(get_db),
@@ -330,6 +392,47 @@ async def visits_list(
         },
     })
     return templates.TemplateResponse(request, "admin/visits.html", context=ctx)
+
+
+# ── Exportació (ABANS de /visits/{visit_id} per evitar conflicte de rutes) ──
+
+@router.get("/visits/export")
+async def export_visits(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+    date_from: str = "",
+    date_to: str = "",
+    company: str = "",
+    dept_id: str = "",
+    name: str = "",
+    status: str = "",
+    fmt: str = "xlsx",
+):
+    d_from = date.fromisoformat(date_from) if date_from else None
+    d_to = date.fromisoformat(date_to) if date_to else None
+
+    visits, _ = await _get_filtered_visits(
+        db, d_from, d_to, company or None, dept_id or None, name or None, status or None,
+        limit=10000, offset=0,
+    )
+
+    date_range = f"{date_from or 'inici'}_{date_to or 'fi'}"
+
+    if fmt == "csv":
+        content = visits_to_csv(visits)
+        media_type = "text/csv"
+        filename = f"visites_{date_range}.csv"
+    else:
+        content = visits_to_excel(visits, date_range)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = f"visites_{date_range}.xlsx"
+
+    return Response(
+        content=content.getvalue(),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Detall visita ────────────────────────────────────────
@@ -458,47 +561,6 @@ async def delete_visit(
     await db.commit()
 
     return {"ok": True}
-
-
-# ── Exportació ───────────────────────────────────────────
-
-@router.get("/visits/export")
-async def export_visits(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    admin: AdminUser = Depends(require_role("admin", "receptionist")),
-    date_from: str = "",
-    date_to: str = "",
-    company: str = "",
-    dept_id: str = "",
-    name: str = "",
-    status: str = "",
-    fmt: str = "xlsx",
-):
-    d_from = date.fromisoformat(date_from) if date_from else None
-    d_to = date.fromisoformat(date_to) if date_to else None
-
-    visits, _ = await _get_filtered_visits(
-        db, d_from, d_to, company or None, dept_id or None, name or None, status or None,
-        limit=10000, offset=0,
-    )
-
-    date_range = f"{date_from or 'inici'}_{date_to or 'fi'}"
-
-    if fmt == "csv":
-        content = visits_to_csv(visits)
-        media_type = "text/csv"
-        filename = f"visites_{date_range}.csv"
-    else:
-        content = visits_to_excel(visits, date_range)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        filename = f"visites_{date_range}.xlsx"
-
-    return Response(
-        content=content.getvalue(),
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 # ── Estadístiques ────────────────────────────────────────

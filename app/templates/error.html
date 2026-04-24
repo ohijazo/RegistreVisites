@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Error temporal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <div class="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4 text-center">
+        <div class="text-orange-500 text-6xl mb-4">&#9888;</div>
+        <h1 class="text-2xl font-bold text-gray-800 mb-4">Sistema temporalment no disponible</h1>
+        <p class="text-gray-500 mb-2">Sistema temporalmente no disponible</p>
+        <p class="text-gray-400 text-sm mb-6">System temporarily unavailable</p>
+        <p class="text-gray-600 mb-6">
+            Si us plau, contacteu amb recepció.<br>
+            Por favor, contacte con recepción.
+        </p>
+        <button onclick="window.location.reload()"
+                class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-3 font-semibold transition text-lg">
+            Reintentar / Retry
+        </button>
+        <p class="text-xs text-gray-400 mt-4">La pàgina es refrescarà automàticament en 30 segons</p>
+    </div>
+    <script>
+        setTimeout(function() { window.location.reload(); }, 30000);
+    </script>
+</body>
+</html>

@@ -2,18 +2,55 @@
 <html lang="{{ lang|default('ca') }}">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>{% block title %}Registre de Visites{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <style>
-        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
-        .touch-input { min-height: 48px; font-size: 1.1rem; }
-        .touch-btn { min-height: 56px; font-size: 1.1rem; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+            overscroll-behavior: none;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        input, textarea, select { -webkit-user-select: text; user-select: text; }
+        .touch-input { min-height: 52px; font-size: 1.15rem; }
+        .touch-btn { min-height: 56px; font-size: 1.15rem; }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-gray-50 min-h-screen">
     {% block body %}{% endblock %}
+
+    <!-- Idle timeout: torna a l'inici si no hi ha activitat -->
+    {% if kiosk_idle is not defined or kiosk_idle %}
+    <script>
+        (function() {
+            var idleSeconds = {{ settings.KIOSK_RESET_SECONDS if settings is defined else 30 }};
+            var idleTimer;
+            var isHome = window.location.pathname.match(/^\/[a-z]{2}\/$/);
+            if (isHome) return;
+
+            function resetIdle() {
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(function() {
+                    var lang = window.location.pathname.split('/')[1] || 'ca';
+                    if (['ca','es','fr','en'].indexOf(lang) === -1) lang = 'ca';
+                    window.location.href = '/' + lang + '/';
+                }, idleSeconds * 1000);
+            }
+
+            ['touchstart', 'click', 'keydown', 'scroll'].forEach(function(evt) {
+                document.addEventListener(evt, resetIdle, { passive: true });
+            });
+            resetIdle();
+        })();
+    </script>
+    {% endif %}
 </body>
 </html>
