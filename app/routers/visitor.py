@@ -179,15 +179,39 @@ async def submit_legal(
     if not session_data:
         return RedirectResponse(f"/{lang}/", status_code=302)
 
-    # Validar checkboxes
+    # Validar checkboxes i signatura
+    has_error = False
+    error_msg = None
+
     if not check_rules or not check_rgpd:
+        has_error = True
+        error_msg = t(lang, "legal_both_required")
+
+    # Processar signatura
+    signature_bytes = None
+    if signature and signature.startswith("data:image/png;base64,"):
+        try:
+            raw = base64.b64decode(signature.split(",", 1)[1])
+            if len(raw) > 500_000:  # Màx 500KB
+                has_error = True
+                error_msg = t(lang, "error_generic")
+            else:
+                signature_bytes = raw
+        except Exception:
+            pass
+
+    if not signature_bytes:
+        has_error = True
+        error_msg = error_msg or t(lang, "legal_signature_required")
+
+    if has_error:
         result = await db.execute(
             select(LegalDocument).where(LegalDocument.active.is_(True))
         )
         legal_doc = result.scalar_one_or_none()
         ctx = _lang_context(lang)
         ctx["legal_doc"] = legal_doc
-        ctx["error"] = t(lang, "legal_both_required")
+        ctx["error"] = error_msg
         return templates.TemplateResponse(request, "visitor/legal.html", ctx)
 
     # Xifrar DNI
@@ -198,15 +222,12 @@ async def submit_legal(
         select(LegalDocument).where(LegalDocument.active.is_(True))
     )
     legal_doc = result.scalar_one_or_none()
+    if not legal_doc:
+        return RedirectResponse(f"/{lang}/register", status_code=302)
 
     # Generar tokens de sortida
     exit_token = secrets.token_urlsafe(32)
     exit_pin = f"{secrets.randbelow(1_000_000):06d}"
-
-    # Processar signatura
-    signature_bytes = None
-    if signature and signature.startswith("data:image/png;base64,"):
-        signature_bytes = base64.b64decode(signature.split(",", 1)[1])
 
     # Crear visita
     visit = Visit(

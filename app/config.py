@@ -1,3 +1,6 @@
+import base64
+import sys
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -33,7 +36,27 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+
+    # Validar clau de xifrat
+    if not s.ENCRYPTION_KEY:
+        print("ERROR: ENCRYPTION_KEY no configurada al .env")
+        sys.exit(1)
+    try:
+        key = base64.b64decode(s.ENCRYPTION_KEY)
+        if len(key) != 32:
+            print("ERROR: ENCRYPTION_KEY ha de ser de 32 bytes (AES-256)")
+            sys.exit(1)
+    except Exception:
+        print("ERROR: ENCRYPTION_KEY no és base64 vàlid")
+        sys.exit(1)
+
+    # Validar secret key
+    if s.SECRET_KEY == "canvia-aquesta-clau-secreta" and s.ENV == "production":
+        print("ERROR: SECRET_KEY per defecte en producció. Canvia-la al .env")
+        sys.exit(1)
+
+    return s
 
 
 settings = get_settings()

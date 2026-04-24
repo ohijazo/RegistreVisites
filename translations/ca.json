@@ -32,6 +32,7 @@
   "legal_signature": "Signatura",
   "legal_signature_clear": "Esborrar",
   "legal_signature_hint": "Signeu amb el dit o el ratolí",
+  "legal_signature_required": "La signatura és obligatòria.",
   "legal_both_required": "Heu d'acceptar tots dos punts per continuar.",
 
   "confirmation_title": "Registre completat",

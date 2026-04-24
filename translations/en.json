@@ -32,6 +32,7 @@
   "legal_signature": "Signature",
   "legal_signature_clear": "Clear",
   "legal_signature_hint": "Sign with your finger or mouse",
+  "legal_signature_required": "Signature is required.",
   "legal_both_required": "You must accept both points to continue.",
 
   "confirmation_title": "Registration complete",

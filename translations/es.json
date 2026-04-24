@@ -32,6 +32,7 @@
   "legal_signature": "Firma",
   "legal_signature_clear": "Borrar",
   "legal_signature_hint": "Firme con el dedo o el ratón",
+  "legal_signature_required": "La firma es obligatoria.",
   "legal_both_required": "Debe aceptar ambos puntos para continuar.",
 
   "confirmation_title": "Registro completado",

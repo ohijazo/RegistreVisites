@@ -32,6 +32,7 @@
   "legal_signature": "Signature",
   "legal_signature_clear": "Effacer",
   "legal_signature_hint": "Signez avec le doigt ou la souris",
+  "legal_signature_required": "La signature est obligatoire.",
   "legal_both_required": "Vous devez accepter les deux points pour continuer.",
 
   "confirmation_title": "Inscription terminée",

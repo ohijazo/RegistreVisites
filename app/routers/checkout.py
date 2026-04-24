@@ -42,10 +42,12 @@ async def checkout_dni(
     id_document: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    # Buscar visites actives amb lock per evitar race conditions
     result = await db.execute(
         select(Visit)
         .where(Visit.checked_out_at.is_(None))
         .order_by(Visit.checked_in_at.desc())
+        .with_for_update(skip_locked=True)
     )
     active_visits = result.scalars().all()
 
@@ -60,9 +62,9 @@ async def checkout_dni(
             continue
 
     if not matches:
-        lang = _get_lang(request)
-        ctx = {"t": lambda key, **kw: t(lang, key, **kw), "lang": lang, "error": t(lang, "checkout_not_found")}
-        return templates.TemplateResponse(request, "checkout/scan.html", ctx)
+        await db.rollback()
+        return templates.TemplateResponse(request, "checkout/scan.html",
+            _ctx(request, error=t(_get_lang(request), "checkout_not_found")))
 
     # Tancar la visita més recent (primera de la llista, ordenada DESC)
     found = matches[0]
@@ -87,9 +89,8 @@ async def checkout_direct(
     visit = result.scalar_one_or_none()
 
     if not visit:
-        lang = _get_lang(request)
-        ctx = {"t": lambda key, **kw: t(lang, key, **kw), "lang": lang, "error": t(lang, "checkout_not_found")}
-        return templates.TemplateResponse(request, "checkout/scan.html", ctx)
+        return templates.TemplateResponse(request, "checkout/scan.html",
+            _ctx(request, error=t(_get_lang(request), "checkout_not_found")))
 
     visit.checked_out_at = datetime.now(timezone.utc)
     visit.checkout_method = "qr"
