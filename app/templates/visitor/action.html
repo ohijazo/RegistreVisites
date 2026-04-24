@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('welcome_title') }}{% endblock %}
+
+{% block body %}
+<div class="flex flex-col items-center justify-center min-h-screen px-4">
+    <!-- Logo -->
+    <div class="mb-8">
+        <img src="/static/logo.png" alt="{{ settings.COMPANY_NAME }}" class="h-16 mx-auto"
+             onerror="this.style.display='none'">
+    </div>
+
+    <h1 class="text-3xl font-bold text-gray-800 mb-10 text-center">
+        {{ t('welcome_title') }}
+    </h1>
+
+    <div class="flex flex-col gap-5 w-full max-w-md">
+        <!-- Checkin -->
+        <a href="/{{ lang }}/register"
+           class="touch-btn flex items-center gap-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xl font-semibold py-8 px-6 transition shadow-md">
+            <svg class="w-10 h-10 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+            </svg>
+            <div class="text-left">
+                <div>{{ t('action_checkin') }}</div>
+                <div class="text-sm font-normal opacity-80">{{ t('action_checkin_desc') }}</div>
+            </div>
+        </a>
+
+        <!-- Checkout -->
+        <a href="/{{ lang }}/checkout"
+           class="touch-btn flex items-center gap-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xl font-semibold py-8 px-6 transition shadow-md">
+            <svg class="w-10 h-10 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <div class="text-left">
+                <div>{{ t('action_checkout') }}</div>
+                <div class="text-sm font-normal opacity-80">{{ t('action_checkout_desc') }}</div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Tornar a selecció idioma -->
+    <div class="mt-10">
+        <a href="/{{ lang }}/" class="text-gray-400 hover:text-gray-600 text-sm">
+            {{ t('btn_back') }}
+        </a>
+    </div>
+</div>
+{% endblock %}

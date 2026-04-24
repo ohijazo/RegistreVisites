@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="{{ lang|default('ca') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>{% block title %}Registre de Visites{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .touch-input { min-height: 48px; font-size: 1.1rem; }
+        .touch-btn { min-height: 56px; font-size: 1.1rem; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    {% block body %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,164 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Estadístiques{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">Estadístiques</h1>
+
+<!-- Filtres -->
+<div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+    <form method="GET" action="/admin/stats" class="flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Des de</label>
+            <input type="date" name="date_from" value="{{ date_from }}"
+                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Fins a</label>
+            <input type="date" name="date_to" value="{{ date_to }}"
+                   class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <button type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+            Aplicar
+        </button>
+    </form>
+</div>
+
+<!-- Resum -->
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+    <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+        <p class="text-xs text-gray-500 mb-1">Total visites</p>
+        <p class="text-2xl font-bold text-gray-800">{{ total_visits }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+        <p class="text-xs text-gray-500 mb-1">Visitants únics</p>
+        <p class="text-2xl font-bold text-gray-800">{{ unique_visitors }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+        <p class="text-xs text-gray-500 mb-1">Empreses úniques</p>
+        <p class="text-2xl font-bold text-gray-800">{{ unique_companies }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+        <p class="text-xs text-gray-500 mb-1">Durada mitjana</p>
+        <p class="text-2xl font-bold text-gray-800">
+            {% if avg_duration %}{{ (avg_duration // 60)|int }}h {{ (avg_duration % 60)|int }}min{% else %}—{% endif %}
+        </p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+        <p class="text-xs text-gray-500 mb-1">Sense sortida</p>
+        <p class="text-2xl font-bold text-gray-800">{{ no_checkout }}</p>
+    </div>
+</div>
+
+<!-- Gràfics -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per dia</h2>
+        <canvas id="chart-daily" height="200"></canvas>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per departament</h2>
+        <canvas id="chart-dept" height="200"></canvas>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per franja horària</h2>
+        <canvas id="chart-hourly" height="200"></canvas>
+    </div>
+
+    <!-- Top empreses -->
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Top empreses visitants</h2>
+        <table class="w-full text-sm">
+            <thead class="text-gray-500 text-xs uppercase">
+                <tr>
+                    <th class="text-left pb-2">Empresa</th>
+                    <th class="text-right pb-2">Visites</th>
+                    <th class="text-right pb-2">Última</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for c in top_companies %}
+                <tr>
+                    <td class="py-2 text-gray-800">{{ c.company }}</td>
+                    <td class="py-2 text-right text-gray-600">{{ c.total }}</td>
+                    <td class="py-2 text-right text-gray-400">{{ c.last_visit.strftime('%d/%m/%Y') }}</td>
+                </tr>
+                {% endfor %}
+                {% if not top_companies %}
+                <tr><td colspan="3" class="py-4 text-center text-gray-400">Sense dades</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const dailyData = {{ daily_data|safe }};
+    const deptData = {{ dept_data|safe }};
+    const hourlyData = {{ hourly_data|safe }};
+
+    // Gràfic diari
+    new Chart(document.getElementById('chart-daily'), {
+        type: 'bar',
+        data: {
+            labels: dailyData.map(d => d.day),
+            datasets: [{
+                label: 'Visites',
+                data: dailyData.map(d => d.total),
+                backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+
+    // Gràfic departaments
+    const deptColors = ['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+    new Chart(document.getElementById('chart-dept'), {
+        type: 'pie',
+        data: {
+            labels: deptData.map(d => d.name),
+            datasets: [{
+                data: deptData.map(d => d.total),
+                backgroundColor: deptColors.slice(0, deptData.length),
+            }]
+        },
+        options: { responsive: true }
+    });
+
+    // Gràfic horari
+    const hours = Array.from({length: 14}, (_, i) => i + 7);
+    const hourlyMap = Object.fromEntries(hourlyData.map(d => [d.hour, d.total]));
+    new Chart(document.getElementById('chart-hourly'), {
+        type: 'bar',
+        data: {
+            labels: hours.map(h => h + ':00'),
+            datasets: [{
+                label: 'Visites',
+                data: hours.map(h => hourlyMap[h] || 0),
+                backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+
+<!-- Targetes de resum -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
+        <p class="text-sm text-gray-500">Visites actives (ara)</p>
+        <p class="text-3xl font-bold text-gray-800">{{ active_count }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
+        <p class="text-sm text-gray-500">Entrades avui</p>
+        <p class="text-3xl font-bold text-gray-800">{{ entries_today }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-orange-500">
+        <p class="text-sm text-gray-500">Sortides avui</p>
+        <p class="text-3xl font-bold text-gray-800">{{ exits_today }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
+        <p class="text-sm text-gray-500">Durada mitjana avui</p>
+        <p class="text-3xl font-bold text-gray-800">
+            {% if avg_duration %}{{ (avg_duration // 60)|int }}h {{ (avg_duration % 60)|int }}min{% else %}—{% endif %}
+        </p>
+    </div>
+</div>
+
+<!-- Taula visites actives -->
+<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Visites actives</h2>
+        <span class="text-xs text-gray-400">Actualització automàtica cada 30s</span>
+    </div>
+    <div id="active-table"
+         hx-get="/admin/api/active-visits"
+         hx-trigger="every 30s"
+         hx-target="#active-table"
+         hx-swap="innerHTML">
+        {% include "admin/_active_visits_table.html" %}
+    </div>
+</div>
+{% endblock %}

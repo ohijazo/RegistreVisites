@@ -1,0 +1,83 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Textos legals{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">Textos legals</h1>
+
+<!-- Crear nova versió -->
+<div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+    <h2 class="text-sm font-semibold text-gray-700 mb-3">Nova versió</h2>
+    <form method="POST" action="/admin/legal">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Contingut (CA)</label>
+                <textarea name="content_ca" required rows="6"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Contenido (ES)</label>
+                <textarea name="content_es" required rows="6"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Contenu (FR)</label>
+                <textarea name="content_fr" required rows="6"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Content (EN)</label>
+                <textarea name="content_en" required rows="6"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+        </div>
+        <button type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+            Crear versió
+        </button>
+    </form>
+</div>
+
+<!-- Historial de versions -->
+<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-600 text-xs uppercase">
+            <tr>
+                <th class="px-5 py-3 text-left">Data creació</th>
+                <th class="px-5 py-3 text-left">Hash</th>
+                <th class="px-5 py-3 text-left">Estat</th>
+                <th class="px-5 py-3 text-left">Accions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for doc in docs %}
+            <tr>
+                <td class="px-5 py-3 text-gray-800">{{ doc.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td class="px-5 py-3 text-gray-500 font-mono text-xs">{{ doc.content_hash[:12] }}...</td>
+                <td class="px-5 py-3">
+                    {% if doc.active %}
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Activa</span>
+                    {% else %}
+                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Inactiva</span>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-3">
+                    {% if not doc.active %}
+                    <form method="POST" action="/admin/legal/{{ doc.id }}/activate" class="inline">
+                        <button type="submit" class="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">
+                            Activar
+                        </button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not docs %}
+            <tr>
+                <td colspan="4" class="px-5 py-8 text-center text-gray-400">No hi ha documents legals</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

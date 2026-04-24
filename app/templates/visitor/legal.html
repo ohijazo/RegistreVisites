@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('legal_title') }}{% endblock %}
+
+{% block body %}
+<div class="max-w-lg mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">{{ t('legal_title') }}</h1>
+
+    <!-- Contenidor de scroll per als textos legals -->
+    <div id="legal-text"
+         class="border border-gray-300 rounded-lg p-4 mb-4 overflow-y-auto bg-white text-sm text-gray-700 leading-relaxed"
+         style="max-height: 45vh;"
+         onscroll="checkScroll()">
+        {% if legal_doc %}
+            {{ (legal_doc['content_' + lang] if legal_doc['content_' + lang] is defined else legal_doc.content_ca)|safe }}
+        {% else %}
+            <p class="text-gray-500 italic">No hi ha document legal disponible.</p>
+        {% endif %}
+    </div>
+
+    <!-- Indicador de scroll -->
+    <div id="scroll-hint" class="text-center text-blue-600 text-sm mb-4 animate-bounce">
+        ↓ {{ t('legal_scroll_hint') }}
+    </div>
+
+    {% if error %}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/{{ lang }}/legal">
+        <div class="space-y-3 mb-4">
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="check_rules" value="1" id="check-rules"
+                       disabled
+                       class="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                <span class="text-gray-700">{{ t('legal_check_rules') }}</span>
+            </label>
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="check_rgpd" value="1" id="check-rgpd"
+                       disabled
+                       class="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                <span class="text-gray-700">{{ t('legal_check_rgpd') }}</span>
+            </label>
+        </div>
+
+        <!-- Signatura manuscrita -->
+        <div id="signature-section" class="mb-4" style="display:none;">
+            <label class="block text-gray-700 font-medium mb-2">{{ t('legal_signature') }}</label>
+            <div class="border-2 border-gray-300 rounded-lg bg-white relative" style="touch-action: none;">
+                <canvas id="sig-canvas" width="460" height="160"
+                        class="w-full rounded-lg cursor-crosshair"></canvas>
+                <button type="button" onclick="clearSignature()"
+                        class="absolute top-2 right-2 text-xs bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 py-1 rounded">
+                    {{ t('legal_signature_clear') }}
+                </button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">{{ t('legal_signature_hint') }}</p>
+            <input type="hidden" name="signature" id="signature-data">
+        </div>
+
+        <div class="flex gap-3">
+            <a href="/{{ lang }}/register"
+               class="touch-btn flex-1 flex items-center justify-center bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold transition">
+                {{ t('btn_back') }}
+            </a>
+            <button type="submit" id="btn-submit" disabled
+                    onclick="return prepareSubmit()"
+                    class="touch-btn flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ t('btn_submit') }}
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+// ── Scroll check ──
+function checkScroll() {
+    const el = document.getElementById('legal-text');
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 20) {
+        enableCheckboxes();
+    }
+}
+
+function enableCheckboxes() {
+    document.getElementById('check-rules').disabled = false;
+    document.getElementById('check-rgpd').disabled = false;
+    document.getElementById('scroll-hint').style.display = 'none';
+}
+
+window.addEventListener('load', function() {
+    const el = document.getElementById('legal-text');
+    if (el.scrollHeight <= el.clientHeight) {
+        enableCheckboxes();
+    }
+});
+
+// ── Checkboxes → mostrar signatura ──
+function updateState() {
+    const rules = document.getElementById('check-rules').checked;
+    const rgpd = document.getElementById('check-rgpd').checked;
+    const both = rules && rgpd;
+    document.getElementById('signature-section').style.display = both ? 'block' : 'none';
+    document.getElementById('btn-submit').disabled = !(both && hasSigned);
+}
+
+document.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+    cb.addEventListener('change', updateState);
+});
+
+// ── Signature pad ──
+const canvas = document.getElementById('sig-canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+let hasSigned = false;
+
+function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if (e.touches) {
+        return {
+            x: (e.touches[0].clientX - rect.left) * scaleX,
+            y: (e.touches[0].clientY - rect.top) * scaleY
+        };
+    }
+    return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+    };
+}
+
+function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    const pos = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+}
+
+function draw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const pos = getPos(e);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    hasSigned = true;
+}
+
+function stopDraw(e) {
+    if (drawing) {
+        e.preventDefault();
+        drawing = false;
+        updateState();
+    }
+}
+
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('mousemove', draw);
+canvas.addEventListener('mouseup', stopDraw);
+canvas.addEventListener('mouseleave', stopDraw);
+canvas.addEventListener('touchstart', startDraw, {passive: false});
+canvas.addEventListener('touchmove', draw, {passive: false});
+canvas.addEventListener('touchend', stopDraw, {passive: false});
+
+function clearSignature() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasSigned = false;
+    updateState();
+}
+
+function prepareSubmit() {
+    if (!hasSigned) return false;
+    document.getElementById('signature-data').value = canvas.toDataURL('image/png');
+    return true;
+}
+</script>
+{% endblock %}
