@@ -44,6 +44,15 @@
   "confirmation_exit_pin": "O introduzca el PIN: {pin}",
   "confirmation_reset_msg": "Esta pantalla se reiniciará en {secs} segundos",
 
+  "action_group": "Registrar grupo",
+  "action_group_desc": "Registrar entrada de varias personas",
+  "group_title": "Registro de grupo",
+  "group_common_data": "Datos comunes del grupo",
+  "group_members": "Miembros del grupo",
+  "group_add_member": "Añadir miembro",
+  "group_done_title": "Grupo registrado",
+  "group_done_count": "{count} personas registradas correctamente",
+
   "checkout_title": "Registro de salida",
   "checkout_scan_qr": "Escanee su código QR",
   "checkout_or_pin": "O introduzca su PIN",
@@ -63,6 +72,7 @@
   "error_generic": "Se ha producido un error. Inténtelo de nuevo.",
 
   "checkout_link": "¿Ya se va? Registre la salida aquí",
+  "lookup_found": "Datos recuperados de una visita anterior.",
   "select_department": "-- Seleccione --",
   "validation_error": "Por favor, corrija los errores del formulario."
 }

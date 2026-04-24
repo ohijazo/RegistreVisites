@@ -1,3 +1,11 @@
+{% if long_stay_count is defined and long_stay_count > 0 %}
+<div class="bg-red-100 border-2 border-red-400 rounded-lg px-5 py-3 mb-4 flex items-center gap-3">
+    <span class="text-2xl">&#9888;</span>
+    <span class="text-red-800 font-semibold">
+        {{ long_stay_count }} visitant{{ 's' if long_stay_count > 1 else '' }} porta{{ 'n' if long_stay_count > 1 else '' }} més de {{ max_hours_alert }}h a les instal·lacions
+    </span>
+</div>
+{% endif %}
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
         <p class="text-sm text-gray-500">Visites actives (ara)</p>

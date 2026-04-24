@@ -44,6 +44,15 @@
   "confirmation_exit_pin": "O introduïu el PIN: {pin}",
   "confirmation_reset_msg": "Aquesta pantalla es reiniciarà en {secs} segons",
 
+  "action_group": "Registrar grup",
+  "action_group_desc": "Registrar entrada de diverses persones",
+  "group_title": "Registre de grup",
+  "group_common_data": "Dades comunes del grup",
+  "group_members": "Membres del grup",
+  "group_add_member": "Afegir membre",
+  "group_done_title": "Grup registrat",
+  "group_done_count": "{count} persones registrades correctament",
+
   "checkout_title": "Registre de sortida",
   "checkout_scan_qr": "Escanegeu el vostre codi QR",
   "checkout_or_pin": "O introduïu el vostre PIN",
@@ -63,6 +72,7 @@
   "error_generic": "S'ha produït un error. Torneu-ho a intentar.",
 
   "checkout_link": "Ja marxeu? Registreu la sortida aquí",
+  "lookup_found": "Dades recuperades d'una visita anterior.",
   "select_department": "-- Seleccioneu --",
   "validation_error": "Si us plau, corregiu els errors del formulari."
 }

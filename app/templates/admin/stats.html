@@ -9,7 +9,7 @@
 {% block content %}
 <h1 class="text-2xl font-bold text-gray-800 mb-6">Estadístiques</h1>
 
-<!-- Filtres -->
+<!-- Filtres de dates -->
 <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <form method="GET" action="/admin/stats" class="flex flex-wrap gap-4 items-end">
         <div>
@@ -29,19 +29,27 @@
     </form>
 </div>
 
+<!-- Filtre actiu (interactiu) -->
+<div id="active-filter" class="hidden bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+    <span class="text-sm text-blue-700">
+        Filtre actiu: <strong id="filter-label"></strong>
+    </span>
+    <button onclick="clearFilter()" class="text-blue-700 hover:text-blue-900 font-bold text-lg">&times; Treure filtre</button>
+</div>
+
 <!-- Resum -->
-<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6" id="summary-cards">
     <div class="bg-white rounded-xl shadow-sm p-4 text-center">
         <p class="text-xs text-gray-500 mb-1">Total visites</p>
-        <p class="text-2xl font-bold text-gray-800">{{ total_visits }}</p>
+        <p class="text-2xl font-bold text-gray-800" id="sum-total">{{ total_visits }}</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-4 text-center">
         <p class="text-xs text-gray-500 mb-1">Visitants únics</p>
-        <p class="text-2xl font-bold text-gray-800">{{ unique_visitors }}</p>
+        <p class="text-2xl font-bold text-gray-800" id="sum-visitors">{{ unique_visitors }}</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-4 text-center">
         <p class="text-xs text-gray-500 mb-1">Empreses úniques</p>
-        <p class="text-2xl font-bold text-gray-800">{{ unique_companies }}</p>
+        <p class="text-2xl font-bold text-gray-800" id="sum-companies">{{ unique_companies }}</p>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-4 text-center">
         <p class="text-xs text-gray-500 mb-1">Durada mitjana</p>
@@ -58,42 +66,40 @@
 <!-- Gràfics -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-white rounded-xl shadow-sm p-5">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per dia</h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per dia <span class="text-xs text-gray-400 font-normal">(clic per filtrar)</span></h2>
         <canvas id="chart-daily" height="200"></canvas>
     </div>
     <div class="bg-white rounded-xl shadow-sm p-5">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per departament</h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per departament <span class="text-xs text-gray-400 font-normal">(clic per filtrar)</span></h2>
         <canvas id="chart-dept" height="200"></canvas>
     </div>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-white rounded-xl shadow-sm p-5">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per franja horària</h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per franja horària <span class="text-xs text-gray-400 font-normal">(clic per filtrar)</span></h2>
         <canvas id="chart-hourly" height="200"></canvas>
     </div>
 
     <!-- Top empreses -->
     <div class="bg-white rounded-xl shadow-sm p-5">
         <h2 class="text-sm font-semibold text-gray-700 mb-3">Top empreses visitants</h2>
-        <table class="w-full text-sm">
+        <table class="w-full text-sm" id="table-companies">
             <thead class="text-gray-500 text-xs uppercase">
                 <tr>
                     <th class="text-left pb-2">Empresa</th>
                     <th class="text-right pb-2">Visites</th>
-                    <th class="text-right pb-2">Última</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100">
+            <tbody class="divide-y divide-gray-100" id="tbody-companies">
                 {% for c in top_companies %}
                 <tr>
                     <td class="py-2 text-gray-800">{{ c.company }}</td>
                     <td class="py-2 text-right text-gray-600">{{ c.total }}</td>
-                    <td class="py-2 text-right text-gray-400">{{ c.last_visit.strftime('%d/%m/%Y') }}</td>
                 </tr>
                 {% endfor %}
                 {% if not top_companies %}
-                <tr><td colspan="3" class="py-4 text-center text-gray-400">Sense dades</td></tr>
+                <tr><td colspan="2" class="py-4 text-center text-gray-400">Sense dades</td></tr>
                 {% endif %}
             </tbody>
         </table>
@@ -103,53 +109,191 @@
 
 {% block extra_scripts %}
 <script>
-    const dailyData = {{ daily_data|safe }};
-    const deptData = {{ dept_data|safe }};
-    const hourlyData = {{ hourly_data|safe }};
+    // Dades originals
+    var rawVisits = {{ raw_visits|safe }};
+    var deptColors = ['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16','#a855f7'];
+
+    // Estat del filtre
+    var activeFilter = null; // {type: 'dept'|'day'|'hour', value: '...'}
+
+    // Charts (guardats per poder actualitzar)
+    var chartDaily, chartDept, chartHourly;
+
+    function getFiltered() {
+        if (!activeFilter) return rawVisits;
+        return rawVisits.filter(function(v) {
+            if (activeFilter.type === 'dept') return v.dept === activeFilter.value;
+            if (activeFilter.type === 'day') return v.day === activeFilter.value;
+            if (activeFilter.type === 'hour') return v.hour === activeFilter.value;
+            return true;
+        });
+    }
+
+    function aggregate(data) {
+        // Per dia
+        var byDay = {};
+        data.forEach(function(v) { byDay[v.day] = (byDay[v.day] || 0) + 1; });
+        var daily = Object.keys(byDay).sort().map(function(d) { return {day: d, total: byDay[d]}; });
+
+        // Per departament
+        var byDept = {};
+        data.forEach(function(v) { byDept[v.dept] = (byDept[v.dept] || 0) + 1; });
+        var dept = Object.keys(byDept).sort(function(a,b) { return byDept[b] - byDept[a]; })
+            .map(function(d) { return {name: d, total: byDept[d]}; });
+
+        // Per hora
+        var byHour = {};
+        data.forEach(function(v) { byHour[v.hour] = (byHour[v.hour] || 0) + 1; });
+        var hourly = [];
+        for (var h = 7; h <= 20; h++) { hourly.push({hour: h, total: byHour[h] || 0}); }
+
+        // Top empreses
+        var byCompany = {};
+        data.forEach(function(v) { byCompany[v.company] = (byCompany[v.company] || 0) + 1; });
+        var companies = Object.keys(byCompany).sort(function(a,b) { return byCompany[b] - byCompany[a]; })
+            .slice(0, 10).map(function(c) { return {company: c, total: byCompany[c]}; });
+
+        // Resum
+        var uniqueNames = new Set(data.map(function(v) { return v.name; }));
+        var uniqueCompanies = new Set(data.map(function(v) { return v.company; }));
+
+        return { daily: daily, dept: dept, hourly: hourly, companies: companies,
+                 total: data.length, visitors: uniqueNames.size, companiesCount: uniqueCompanies.size };
+    }
+
+    function updateCharts() {
+        var filtered = getFiltered();
+        var agg = aggregate(filtered);
+
+        // Actualitzar resum
+        document.getElementById('sum-total').textContent = agg.total;
+        document.getElementById('sum-visitors').textContent = agg.visitors;
+        document.getElementById('sum-companies').textContent = agg.companiesCount;
+
+        // Diari
+        chartDaily.data.labels = agg.daily.map(function(d) { return d.day; });
+        chartDaily.data.datasets[0].data = agg.daily.map(function(d) { return d.total; });
+        chartDaily.data.datasets[0].backgroundColor = agg.daily.map(function(d) {
+            return (activeFilter && activeFilter.type === 'day' && activeFilter.value === d.day) ? '#1d4ed8' : 'rgba(59, 130, 246, 0.7)';
+        });
+        chartDaily.update();
+
+        // Departaments
+        chartDept.data.labels = agg.dept.map(function(d) { return d.name; });
+        chartDept.data.datasets[0].data = agg.dept.map(function(d) { return d.total; });
+        chartDept.data.datasets[0].backgroundColor = agg.dept.map(function(d, i) {
+            if (activeFilter && activeFilter.type === 'dept' && activeFilter.value === d.name) {
+                return deptColors[i % deptColors.length];
+            }
+            return activeFilter && activeFilter.type === 'dept' ? deptColors[i % deptColors.length] + '40' : deptColors[i % deptColors.length];
+        });
+        chartDept.update();
+
+        // Horari
+        chartHourly.data.datasets[0].data = agg.hourly.map(function(d) { return d.total; });
+        chartHourly.data.datasets[0].backgroundColor = agg.hourly.map(function(d) {
+            return (activeFilter && activeFilter.type === 'hour' && activeFilter.value === d.hour) ? '#047857' : 'rgba(16, 185, 129, 0.7)';
+        });
+        chartHourly.update();
+
+        // Top empreses
+        var tbody = document.getElementById('tbody-companies');
+        if (agg.companies.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" class="py-4 text-center text-gray-400">Sense dades</td></tr>';
+        } else {
+            tbody.innerHTML = agg.companies.map(function(c) {
+                return '<tr class="hover:bg-gray-50"><td class="py-2 text-gray-800">' + c.company + '</td><td class="py-2 text-right text-gray-600">' + c.total + '</td></tr>';
+            }).join('');
+        }
+
+        // Indicador filtre
+        var filterEl = document.getElementById('active-filter');
+        if (activeFilter) {
+            filterEl.classList.remove('hidden');
+            var label = '';
+            if (activeFilter.type === 'dept') label = 'Departament: ' + activeFilter.value;
+            if (activeFilter.type === 'day') label = 'Dia: ' + activeFilter.value;
+            if (activeFilter.type === 'hour') label = 'Hora: ' + activeFilter.value + ':00';
+            document.getElementById('filter-label').textContent = label;
+        } else {
+            filterEl.classList.add('hidden');
+        }
+    }
+
+    function setFilter(type, value) {
+        if (activeFilter && activeFilter.type === type && activeFilter.value === value) {
+            activeFilter = null; // Toggle off
+        } else {
+            activeFilter = {type: type, value: value};
+        }
+        updateCharts();
+    }
+
+    function clearFilter() {
+        activeFilter = null;
+        updateCharts();
+    }
+
+    function chartClick(chart, type, getData) {
+        return function(evt) {
+            var points = chart.getElementsAtEventForMode(evt, 'nearest', {intersect: true}, true);
+            if (points.length > 0) {
+                var idx = points[0].index;
+                var value = getData(idx);
+                setFilter(type, value);
+            }
+        };
+    }
+
+    // Inicialitzar gràfics
+    var initAgg = aggregate(rawVisits);
 
     // Gràfic diari
-    new Chart(document.getElementById('chart-daily'), {
+    chartDaily = new Chart(document.getElementById('chart-daily'), {
         type: 'bar',
         data: {
-            labels: dailyData.map(d => d.day),
+            labels: initAgg.daily.map(function(d) { return d.day; }),
             datasets: [{
                 label: 'Visites',
-                data: dailyData.map(d => d.total),
+                data: initAgg.daily.map(function(d) { return d.total; }),
                 backgroundColor: 'rgba(59, 130, 246, 0.7)',
                 borderRadius: 4,
             }]
         },
         options: {
             responsive: true,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            plugins: { legend: { display: false }, tooltip: { callbacks: { title: function(items) { return items[0].label; } } } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+            onClick: function(evt) { chartClick(chartDaily, 'day', function(i) { return initAgg.daily[i] ? initAgg.daily[i].day : null; })(evt); }
         }
     });
 
     // Gràfic departaments
-    const deptColors = ['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316'];
-    new Chart(document.getElementById('chart-dept'), {
+    chartDept = new Chart(document.getElementById('chart-dept'), {
         type: 'pie',
         data: {
-            labels: deptData.map(d => d.name),
+            labels: initAgg.dept.map(function(d) { return d.name; }),
             datasets: [{
-                data: deptData.map(d => d.total),
-                backgroundColor: deptColors.slice(0, deptData.length),
+                data: initAgg.dept.map(function(d) { return d.total; }),
+                backgroundColor: deptColors.slice(0, initAgg.dept.length),
             }]
         },
-        options: { responsive: true }
+        options: {
+            responsive: true,
+            onClick: function(evt) { chartClick(chartDept, 'dept', function(i) { return chartDept.data.labels[i]; })(evt); }
+        }
     });
 
     // Gràfic horari
-    const hours = Array.from({length: 14}, (_, i) => i + 7);
-    const hourlyMap = Object.fromEntries(hourlyData.map(d => [d.hour, d.total]));
-    new Chart(document.getElementById('chart-hourly'), {
+    var hours = [];
+    for (var h = 7; h <= 20; h++) hours.push(h);
+    chartHourly = new Chart(document.getElementById('chart-hourly'), {
         type: 'bar',
         data: {
-            labels: hours.map(h => h + ':00'),
+            labels: hours.map(function(h) { return h + ':00'; }),
             datasets: [{
                 label: 'Visites',
-                data: hours.map(h => hourlyMap[h] || 0),
+                data: initAgg.hourly.map(function(d) { return d.total; }),
                 backgroundColor: 'rgba(16, 185, 129, 0.7)',
                 borderRadius: 4,
             }]
@@ -157,7 +301,8 @@
         options: {
             responsive: true,
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+            onClick: function(evt) { chartClick(chartHourly, 'hour', function(i) { return hours[i]; })(evt); }
         }
     });
 </script>

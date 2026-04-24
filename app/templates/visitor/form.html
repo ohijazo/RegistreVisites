@@ -58,9 +58,11 @@
             <label class="block text-gray-700 font-semibold text-base mb-2">
                 {{ t('field_id_document') }} <span class="text-red-500">*</span>
             </label>
-            <input type="text" name="id_document" autocomplete="off" required maxlength="50" style="text-transform: uppercase;"
+            <input type="text" name="id_document" id="id_document" autocomplete="off" required maxlength="50" style="text-transform: uppercase;"
                    value="{{ form_data.get('id_document', '') }}"
+                   onblur="lookupVisitor()"
                    class="touch-input w-full border-2 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {% if errors.get('id_document') %}border-red-500{% else %}border-gray-300{% endif %}">
+            <p id="lookup-msg" class="text-green-600 text-sm mt-1 font-medium hidden"></p>
             {% if errors.get('id_document') %}
             <p class="text-red-600 text-sm mt-1 font-semibold">{{ errors['id_document'] }}</p>
             {% endif %}
@@ -153,11 +155,41 @@ function validateForm() {
         window.scrollTo({top: 0, behavior: 'smooth'});
         return false;
     }
-    // Desactivar botó per evitar doble clic
-    document.getElementById('btn-submit').disabled = true;
-    document.getElementById('btn-text').classList.add('hidden');
-    document.getElementById('btn-spinner').classList.remove('hidden');
+    setTimeout(function() {
+        document.getElementById('btn-submit').disabled = true;
+        document.getElementById('btn-text').classList.add('hidden');
+        document.getElementById('btn-spinner').classList.remove('hidden');
+    }, 100);
     return true;
+}
+
+var lookupDone = false;
+async function lookupVisitor() {
+    var dni = document.getElementById('id_document').value.trim();
+    if (!dni || dni.length < 4 || lookupDone) return;
+
+    var formData = new FormData();
+    formData.append('id_document', dni);
+
+    try {
+        var resp = await fetch('/api/lookup-visitor', {method: 'POST', body: formData});
+        var data = await resp.json();
+        if (data.found) {
+            // Pre-omplir camps si estan buits
+            var fields = {first_name: data.first_name, last_name: data.last_name, company: data.company, phone: data.phone};
+            for (var name in fields) {
+                var field = document.querySelector('[name="' + name + '"]');
+                if (field && !field.value.trim()) {
+                    field.value = fields[name];
+                }
+            }
+            lookupDone = true;
+            var msg = document.getElementById('lookup-msg');
+            msg.textContent = '{{ t("lookup_found") }}';
+            msg.classList.remove('hidden');
+            setTimeout(function() { msg.classList.add('hidden'); }, 5000);
+        }
+    } catch(e) {}
 }
 </script>
 {% endblock %}

@@ -44,6 +44,15 @@
   "confirmation_exit_pin": "Ou entrez le PIN : {pin}",
   "confirmation_reset_msg": "Cet écran se réinitialisera dans {secs} secondes",
 
+  "action_group": "Enregistrer un groupe",
+  "action_group_desc": "Enregistrer l'entrée de plusieurs personnes",
+  "group_title": "Enregistrement de groupe",
+  "group_common_data": "Données communes du groupe",
+  "group_members": "Membres du groupe",
+  "group_add_member": "Ajouter un membre",
+  "group_done_title": "Groupe enregistré",
+  "group_done_count": "{count} personnes enregistrées correctement",
+
   "checkout_title": "Registre de sortie",
   "checkout_scan_qr": "Scannez votre code QR",
   "checkout_or_pin": "Ou entrez votre PIN",
@@ -63,6 +72,7 @@
   "error_generic": "Une erreur s'est produite. Veuillez réessayer.",
 
   "checkout_link": "Vous partez ? Enregistrez la sortie ici",
+  "lookup_found": "Données récupérées d'une visite précédente.",
   "select_department": "-- Sélectionnez --",
   "validation_error": "Veuillez corriger les erreurs du formulaire."
 }

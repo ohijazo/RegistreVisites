@@ -44,6 +44,15 @@
   "confirmation_exit_pin": "Or enter the PIN: {pin}",
   "confirmation_reset_msg": "This screen will reset in {secs} seconds",
 
+  "action_group": "Register group",
+  "action_group_desc": "Register entry for multiple people",
+  "group_title": "Group registration",
+  "group_common_data": "Common group data",
+  "group_members": "Group members",
+  "group_add_member": "Add member",
+  "group_done_title": "Group registered",
+  "group_done_count": "{count} people registered successfully",
+
   "checkout_title": "Check out",
   "checkout_scan_qr": "Scan your QR code",
   "checkout_or_pin": "Or enter your PIN",
@@ -63,6 +72,7 @@
   "error_generic": "An error occurred. Please try again.",
 
   "checkout_link": "Leaving? Register your exit here",
+  "lookup_found": "Data retrieved from a previous visit.",
   "select_department": "-- Select --",
   "validation_error": "Please correct the errors in the form."
 }

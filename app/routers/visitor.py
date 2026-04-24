@@ -43,12 +43,148 @@ async def action_page(lang: str, request: Request):
     return templates.TemplateResponse(request, "visitor/action.html", _lang_context(lang))
 
 
+@router.get("/{lang}/group", response_class=HTMLResponse)
+async def group_form(
+    lang: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    if lang not in SUPPORTED_LANGS:
+        return RedirectResponse("/ca/", status_code=302)
+
+    dept_result = await db.execute(
+        select(Department).where(Department.active.is_(True)).order_by(Department.order)
+    )
+    departments = dept_result.scalars().all()
+
+    ctx = _lang_context(lang)
+    ctx["departments"] = departments
+    ctx["error"] = None
+    return templates.TemplateResponse(request, "visitor/group.html", ctx)
+
+
+@router.post("/{lang}/group")
+async def submit_group(
+    lang: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    if lang not in SUPPORTED_LANGS:
+        return RedirectResponse("/ca/", status_code=302)
+
+    form = await request.form()
+    company = (form.get("company") or "").strip().upper()
+    department_id = (form.get("department_id") or "").strip()
+    visit_reason = (form.get("visit_reason") or "").strip()
+    names = form.getlist("members_name[]")
+    dnis = form.getlist("members_dni[]")
+
+    if not company or not department_id or not visit_reason:
+        dept_result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        ctx = _lang_context(lang)
+        ctx["departments"] = dept_result.scalars().all()
+        ctx["error"] = t(lang, "error_required")
+        return templates.TemplateResponse(request, "visitor/group.html", ctx)
+
+    # Obtenir document legal actiu
+    legal_result = await db.execute(
+        select(LegalDocument).where(LegalDocument.active.is_(True))
+    )
+    legal_doc = legal_result.scalar_one_or_none()
+
+    created = 0
+    for i in range(len(names)):
+        name = (names[i] if i < len(names) else "").strip()
+        dni = (dnis[i] if i < len(dnis) else "").strip().upper()
+        if not name or not dni:
+            continue
+
+        # Separar nom i cognoms
+        parts = name.split(" ", 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+
+        enc, iv = encrypt(dni)
+        exit_token = secrets.token_urlsafe(32)
+        exit_pin = f"{secrets.randbelow(1_000_000):06d}"
+
+        visit = Visit(
+            first_name=first_name,
+            last_name=last_name,
+            company=company,
+            id_document_enc=enc,
+            id_document_iv=iv,
+            department_id=department_id,
+            visit_reason=visit_reason,
+            language=lang,
+            legal_document_id=legal_doc.id if legal_doc else None,
+            accepted_at=datetime.now(timezone.utc),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            exit_token=exit_token,
+            exit_pin=exit_pin,
+        )
+        db.add(visit)
+        created += 1
+
+    if created == 0:
+        dept_result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        ctx = _lang_context(lang)
+        ctx["departments"] = dept_result.scalars().all()
+        ctx["error"] = t(lang, "error_required")
+        return templates.TemplateResponse(request, "visitor/group.html", ctx)
+
+    await db.commit()
+
+    ctx = _lang_context(lang)
+    ctx["count"] = created
+    ctx["kiosk_reset_seconds"] = settings.KIOSK_CONFIRM_SECONDS
+    return templates.TemplateResponse(request, "visitor/group_done.html", ctx)
+
+
 @router.get("/{lang}/checkout", response_class=HTMLResponse)
 async def checkout_lang(lang: str, request: Request):
     if lang not in SUPPORTED_LANGS:
         return RedirectResponse("/ca/", status_code=302)
     request.session["checkout_lang"] = lang
     return RedirectResponse("/checkout", status_code=302)
+
+
+@router.post("/api/lookup-visitor")
+async def lookup_visitor(
+    request: Request,
+    id_document: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+):
+    """Buscar si un DNI ja ha visitat abans i retornar les dades."""
+    if not id_document.strip():
+        return {"found": False}
+
+    needle = id_document.strip().upper().replace(" ", "")
+
+    # Buscar l'última visita amb aquest DNI
+    result = await db.execute(
+        select(Visit).order_by(Visit.checked_in_at.desc())
+    )
+    for visit in result.scalars():
+        try:
+            decrypted = decrypt(visit.id_document_enc, visit.id_document_iv)
+            if decrypted.upper().replace(" ", "") == needle:
+                return {
+                    "found": True,
+                    "first_name": visit.first_name,
+                    "last_name": visit.last_name,
+                    "company": visit.company,
+                    "phone": visit.phone or "",
+                }
+        except Exception:
+            continue
+
+    return {"found": False}
 
 
 @router.get("/{lang}/register", response_class=HTMLResponse)
@@ -189,10 +325,10 @@ async def submit_legal(
 
     # Processar signatura
     signature_bytes = None
-    if signature and signature.startswith("data:image/png;base64,"):
+    if signature and signature.startswith("data:image/") and ";base64," in signature:
         try:
             raw = base64.b64decode(signature.split(",", 1)[1])
-            if len(raw) > 500_000:  # Màx 500KB
+            if len(raw) > 2_000_000:  # Màx 2MB
                 has_error = True
                 error_msg = t(lang, "error_generic")
             else:

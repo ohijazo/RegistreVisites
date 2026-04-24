@@ -103,11 +103,27 @@ window.addEventListener('load', function() {
 // ── Checkboxes → mostrar signatura ──
 var hasSigned = false;
 
+var canvasReady = false;
+
+function initCanvas() {
+    if (canvasReady) return;
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    if (rect.width === 0) return; // Encara no visible
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    canvasReady = true;
+}
+
 function updateState() {
     var rules = document.getElementById('check-rules').checked;
     var rgpd = document.getElementById('check-rgpd').checked;
     var both = rules && rgpd;
     document.getElementById('signature-section').style.display = both ? 'block' : 'none';
+    if (both) setTimeout(initCanvas, 50); // Esperar que el DOM renderitzi
     document.getElementById('btn-submit').disabled = !(both && hasSigned);
 }
 
@@ -119,17 +135,6 @@ document.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
 var canvas = document.getElementById('sig-canvas');
 var ctx = canvas.getContext('2d');
 var drawing = false;
-
-// Ajustar canvas per HiDPI (tablets Retina)
-(function() {
-    var dpr = window.devicePixelRatio || 1;
-    var rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-})();
 
 function getPos(e) {
     var rect = canvas.getBoundingClientRect();
@@ -162,15 +167,23 @@ function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); ha
 function prepareSubmit() {
     if (!hasSigned) return false;
     try {
-        document.getElementById('signature-data').value = canvas.toDataURL('image/png');
+        var tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = 400;
+        tmpCanvas.height = 150;
+        var tmpCtx = tmpCanvas.getContext('2d');
+        tmpCtx.fillStyle = '#ffffff';
+        tmpCtx.fillRect(0, 0, 400, 150);
+        tmpCtx.drawImage(canvas, 0, 0, 400, 150);
+        document.getElementById('signature-data').value = tmpCanvas.toDataURL('image/png');
     } catch(e) {
         return false;
     }
-    // Desactivar botó per evitar doble clic
-    var btn = document.getElementById('btn-submit');
-    btn.disabled = true;
-    document.getElementById('btn-text').classList.add('hidden');
-    document.getElementById('btn-spinner').classList.remove('hidden');
+    // Desactivar botó DESPRÉS que el formulari s'enviï
+    setTimeout(function() {
+        document.getElementById('btn-submit').disabled = true;
+        document.getElementById('btn-text').classList.add('hidden');
+        document.getElementById('btn-spinner').classList.remove('hidden');
+    }, 100);
     return true;
 }
 </script>

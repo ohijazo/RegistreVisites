@@ -298,6 +298,10 @@ async def dashboard(
     )
     avg_duration = avg_result.scalar()
 
+    # Visitants llargs
+    alert_cutoff = now - timedelta(hours=settings.MAX_VISIT_HOURS_ALERT)
+    long_stay_count = sum(1 for v in active_visits if v.checked_in_at <= alert_cutoff)
+
     ctx = _admin_context(admin)
     ctx.update({
         "active_visits": active_visits,
@@ -307,6 +311,7 @@ async def dashboard(
         "avg_duration": round(avg_duration) if avg_duration else None,
         "max_hours_warn": settings.MAX_VISIT_HOURS_WARN,
         "max_hours_alert": settings.MAX_VISIT_HOURS_ALERT,
+        "long_stay_count": long_stay_count,
     })
     return templates.TemplateResponse(request, "admin/dashboard.html", context=ctx)
 
@@ -365,12 +370,23 @@ async def api_stats_cards(
     )
     avg_duration = avg_result.scalar()
 
+    # Visitants que porten massa hores
+    alert_cutoff = now - timedelta(hours=settings.MAX_VISIT_HOURS_ALERT)
+    long_stay_result = await db.execute(
+        select(func.count(Visit.id)).where(
+            Visit.checked_out_at.is_(None),
+            Visit.checked_in_at <= alert_cutoff,
+        )
+    )
+
     ctx = _admin_context(admin)
     ctx.update({
         "active_count": active_result.scalar(),
         "entries_today": entries_result.scalar(),
         "exits_today": exits_result.scalar(),
         "avg_duration": round(avg_duration) if avg_duration else None,
+        "long_stay_count": long_stay_result.scalar(),
+        "max_hours_alert": settings.MAX_VISIT_HOURS_ALERT,
     })
     return templates.TemplateResponse(request, "admin/_stats_cards.html", context=ctx)
 
@@ -772,6 +788,30 @@ async def stats_page(
         for row in top_companies_result
     ]
 
+    # Dades crues per filtratge interactiu (dia, dept, hora, empresa per cada visita)
+    raw_result = await db.execute(
+        select(
+            func.date_trunc("day", Visit.checked_in_at).label("day"),
+            Department.name_ca.label("dept"),
+            func.extract("hour", Visit.checked_in_at).label("hour"),
+            Visit.company,
+            Visit.first_name,
+            Visit.last_name,
+        ).outerjoin(Department, Visit.department_id == Department.id)
+        .where(period_filter)
+        .order_by(Visit.checked_in_at)
+    )
+    raw_visits = [
+        {
+            "day": row.day.strftime("%Y-%m-%d"),
+            "dept": row.dept or "—",
+            "hour": int(row.hour),
+            "company": row.company,
+            "name": f"{row.first_name} {row.last_name}",
+        }
+        for row in raw_result
+    ]
+
     ctx = _admin_context(admin)
     ctx.update({
         "date_from": date_from,
@@ -785,6 +825,7 @@ async def stats_page(
         "dept_data": json.dumps(dept_data),
         "hourly_data": json.dumps(hourly_data),
         "top_companies": top_companies,
+        "raw_visits": json.dumps(raw_visits),
     })
     return templates.TemplateResponse(request, "admin/stats.html", context=ctx)
 
