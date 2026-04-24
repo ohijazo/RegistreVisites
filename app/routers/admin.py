@@ -88,6 +88,17 @@ def _admin_context(admin: AdminUser) -> dict:
     }
 
 
+# ── Ajuda ────────────────────────────────────────────────
+
+@router.get("/help", response_class=HTMLResponse)
+async def help_page(
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    ctx = _admin_context(admin)
+    return templates.TemplateResponse(request, "admin/help.html", ctx)
+
+
 # ── Login / Logout ───────────────────────────────────────
 
 @router.get("/login", response_class=HTMLResponse)
@@ -417,7 +428,7 @@ async def manual_checkout(
 
 # ── Eliminar visita (RGPD) ───────────────────────────────
 
-@router.delete("/visits/{visit_id}")
+@router.post("/visits/{visit_id}/delete")
 async def delete_visit(
     visit_id: str,
     request: Request,
@@ -429,13 +440,18 @@ async def delete_visit(
     if not visit:
         return {"error": "Visita no trobada."}
 
-    # Auditoria abans d'eliminar
+    # Auditoria abans d'eliminar (visit_id=None perquè la visita s'eliminarà)
     audit = AuditLog(
         admin_id=admin.id,
-        visit_id=visit.id,
+        visit_id=None,
         action="delete_visit",
         ip_address=request.client.host if request.client else None,
-        detail=json.dumps({"first_name": visit.first_name, "last_name": visit.last_name}),
+        detail=json.dumps({
+            "visit_id": str(visit.id),
+            "first_name": visit.first_name,
+            "last_name": visit.last_name,
+            "company": visit.company,
+        }),
     )
     db.add(audit)
     await db.delete(visit)

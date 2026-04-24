@@ -15,53 +15,17 @@
         </div>
         {% endif %}
 
-        <!-- Instrucció QR -->
-        <div class="text-center mb-6">
-            <div class="text-6xl mb-3">📱</div>
-            <p class="text-gray-600">{{ t('checkout_scan_qr') }}</p>
-        </div>
-
-        <div class="relative my-6">
-            <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-gray-300"></div>
-            </div>
-            <div class="relative flex justify-center text-sm">
-                <span class="bg-white px-4 text-gray-500">{{ t('checkout_or_pin') }}</span>
-            </div>
-        </div>
-
-        <!-- Formulari PIN -->
-        <form method="POST" action="/checkout/pin">
-            <div class="mb-4">
-                <input type="text" name="exit_pin" maxlength="6" pattern="[0-9]{6}"
-                       inputmode="numeric" autocomplete="off"
-                       placeholder="{{ t('checkout_pin_placeholder') }}"
-                       class="touch-input w-full border border-gray-300 rounded-lg px-4 py-3 text-center text-2xl tracking-widest focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-            </div>
-            <button type="submit"
-                    class="touch-btn w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition">
-                {{ t('checkout_btn') }}
-            </button>
-        </form>
-
-        <div class="relative my-6">
-            <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-gray-300"></div>
-            </div>
-            <div class="relative flex justify-center text-sm">
-                <span class="bg-white px-4 text-gray-500">{{ t('checkout_or_dni') }}</span>
-            </div>
-        </div>
+        <p class="text-gray-500 text-center mb-6">{{ t('checkout_dni_instruction') }}</p>
 
         <!-- Formulari DNI -->
         <form method="POST" action="/checkout/dni">
             <div class="mb-4">
-                <input type="text" name="id_document" autocomplete="off"
+                <input type="text" name="id_document" autocomplete="off" autofocus
                        placeholder="{{ t('checkout_dni_placeholder') }}"
-                       class="touch-input w-full border border-gray-300 rounded-lg px-4 py-3 text-center text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                       class="touch-input w-full border border-gray-300 rounded-lg px-4 py-3 text-center text-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             </div>
             <button type="submit"
-                    class="touch-btn w-full bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition">
+                    class="touch-btn w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition">
                 {{ t('checkout_btn') }}
             </button>
         </form>

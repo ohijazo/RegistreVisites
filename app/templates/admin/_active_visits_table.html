@@ -6,6 +6,7 @@
             <th class="px-5 py-3 text-left">Nom i cognoms</th>
             <th class="px-5 py-3 text-left">Empresa</th>
             <th class="px-5 py-3 text-left">Departament</th>
+            <th class="px-5 py-3 text-left">Motiu</th>
             <th class="px-5 py-3 text-left">Entrada</th>
             <th class="px-5 py-3 text-left">Temps dins</th>
             <th class="px-5 py-3 text-left">Accions</th>
@@ -22,6 +23,7 @@
             <td class="px-5 py-3 font-medium text-gray-800">{{ visit.first_name }} {{ visit.last_name }}</td>
             <td class="px-5 py-3 text-gray-600">{{ visit.company }}</td>
             <td class="px-5 py-3 text-gray-600">{{ visit.department.name_ca if visit.department else '—' }}</td>
+            <td class="px-5 py-3 text-gray-600 max-w-xs truncate" title="{{ visit.visit_reason }}">{{ visit.visit_reason }}</td>
             <td class="px-5 py-3 text-gray-600">{{ visit.checked_in_at.strftime('%H:%M') }}</td>
             <td class="px-5 py-3 text-gray-600">{{ hours }}h {{ mins }}min</td>
             <td class="px-5 py-3">

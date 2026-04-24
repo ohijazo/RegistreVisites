@@ -1,0 +1,190 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Ajuda{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">Guia d'ús del panell d'administració</h1>
+
+    <!-- Índex -->
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-8">
+        <h2 class="font-semibold text-blue-800 mb-3">Índex</h2>
+        <ol class="list-decimal list-inside space-y-1 text-blue-700 text-sm">
+            <li><a href="#flux" class="hover:underline">Com funciona el sistema</a></li>
+            <li><a href="#dashboard" class="hover:underline">Dashboard — Visites actives</a></li>
+            <li><a href="#historial" class="hover:underline">Historial de visites</a></li>
+            <li><a href="#detall" class="hover:underline">Detall d'una visita</a></li>
+            <li><a href="#estadistiques" class="hover:underline">Estadístiques</a></li>
+            <li><a href="#departaments" class="hover:underline">Gestió de departaments</a></li>
+            <li><a href="#legal" class="hover:underline">Textos legals</a></li>
+            <li><a href="#usuaris" class="hover:underline">Gestió d'usuaris</a></li>
+            <li><a href="#rols" class="hover:underline">Rols i permisos</a></li>
+            <li><a href="#rgpd" class="hover:underline">Compliment RGPD</a></li>
+        </ol>
+    </div>
+
+    <!-- Seccions -->
+    <div class="space-y-8">
+
+        <!-- 1. Flux general -->
+        <section id="flux" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">1. Com funciona el sistema</h2>
+            <p class="text-gray-600 mb-3">El sistema digitalitza el registre d'entrada i sortida de visitants a les instal·lacions. El flux és el següent:</p>
+            <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 space-y-2">
+                <p><strong>Entrada del visitant (check-in):</strong></p>
+                <ol class="list-decimal list-inside ml-4 space-y-1">
+                    <li>El visitant selecciona l'idioma a la tablet de recepció</li>
+                    <li>Escull "Registrar entrada"</li>
+                    <li>Omple el formulari (nom, cognoms, empresa, DNI, departament, motiu)</li>
+                    <li>Llegeix i accepta les normes de seguretat i la política de protecció de dades</li>
+                    <li>Signa manuscritament a la pantalla</li>
+                    <li>Rep un PIN de 6 dígits per a la sortida</li>
+                </ol>
+                <p class="mt-3"><strong>Sortida del visitant (check-out):</strong></p>
+                <ol class="list-decimal list-inside ml-4 space-y-1">
+                    <li>El visitant selecciona l'idioma i escull "Registrar sortida"</li>
+                    <li>Introdueix el PIN de 6 dígits, o el seu DNI</li>
+                    <li>La sortida queda registrada automàticament</li>
+                </ol>
+                <p class="mt-3"><strong>Sortida manual (admin):</strong></p>
+                <p class="ml-4">Des del Dashboard, un recepcionista o admin pot registrar la sortida manualment clicant "Sortida manual" a la fila del visitant.</p>
+            </div>
+        </section>
+
+        <!-- 2. Dashboard -->
+        <section id="dashboard" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">2. Dashboard — Visites actives</h2>
+            <p class="text-gray-600 mb-3">El Dashboard mostra en temps real qui hi ha a les instal·lacions.</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Targetes superiors:</strong> Visites actives ara, entrades avui, sortides avui, durada mitjana.</li>
+                <li><strong>Taula:</strong> Llista de visitants que encara són dins, amb nom, empresa, departament, motiu, hora d'entrada i temps transcorregut.</li>
+                <li><strong>Colors d'alerta:</strong> Les files es pinten de <span class="text-yellow-600 font-medium">groc</span> si el visitant porta més de 4 hores, i de <span class="text-red-600 font-medium">vermell</span> si en porta més de 8.</li>
+                <li><strong>Actualització automàtica:</strong> La taula es refresca cada 30 segons sense recarregar la pàgina.</li>
+                <li><strong>Sortida manual:</strong> Cliqueu "Sortida manual" per registrar la sortida d'un visitant que no l'ha fet ell mateix.</li>
+            </ul>
+        </section>
+
+        <!-- 3. Historial -->
+        <section id="historial" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">3. Historial de visites</h2>
+            <p class="text-gray-600 mb-3">Consulteu qualsevol visita passada amb filtres combinables:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Filtres:</strong> Data des de/fins a, empresa, departament, nom/cognoms, estat (actives/completades).</li>
+                <li><strong>Paginació:</strong> 25 resultats per pàgina.</li>
+                <li><strong>Exportació Excel:</strong> El botó "Excel" exporta exactament els registres filtrats (no tots). Màxim 10.000 registres per exportació.</li>
+                <li><strong>Accions:</strong> "Veure" obre el detall complet. "Sortida" registra la sortida si la visita encara és activa.</li>
+            </ul>
+        </section>
+
+        <!-- 4. Detall -->
+        <section id="detall" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">4. Detall d'una visita</h2>
+            <p class="text-gray-600 mb-3">Mostra tota la informació d'un registre concret:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Dades del visitant:</strong> Nom, empresa, telèfon, idioma.</li>
+                <li><strong>Dades de la visita:</strong> Entrada, sortida, durada, departament, motiu, mètode de sortida.</li>
+                <li><strong>Acceptació RGPD:</strong> Versió del document acceptat, timestamp, IP, signatura manuscrita.</li>
+                <li><strong>Veure DNI:</strong> El botó "Veure DNI" desxifra el document d'identitat. Requereix confirmar la contrasenya de l'admin. El DNI es mostra durant 10 segons i s'amaga automàticament. <span class="text-red-600 font-medium">Aquesta acció queda registrada al log d'auditoria.</span></li>
+                <li><strong>Eliminar registre:</strong> Només els admins poden eliminar registres (dret de supressió RGPD). L'acció és irreversible i queda auditada.</li>
+            </ul>
+        </section>
+
+        <!-- 5. Estadístiques -->
+        <section id="estadistiques" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">5. Estadístiques</h2>
+            <p class="text-gray-600 mb-3">Tendències i resum de períodes per a informes interns:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Resum:</strong> Total visites, visitants únics, empreses úniques, durada mitjana, visites sense sortida.</li>
+                <li><strong>Gràfic de barres:</strong> Visites per dia — permet detectar pics d'afluència.</li>
+                <li><strong>Gràfic de pastís:</strong> Visites per departament — veure quins departaments reben més visites.</li>
+                <li><strong>Gràfic horari:</strong> Visites per franja horària (7h-20h) — planificar cobertura de recepció.</li>
+                <li><strong>Top empreses:</strong> Taula amb les empreses que més visiten.</li>
+                <li><strong>Filtres:</strong> Seleccioneu el rang de dates desitjat (per defecte: mes actual).</li>
+            </ul>
+        </section>
+
+        <!-- 6. Departaments -->
+        <section id="departaments" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">6. Gestió de departaments</h2>
+            <p class="text-gray-600 mb-3">Administreu els departaments que apareixen al formulari del visitant:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Crear:</strong> Ompliu els noms en els 4 idiomes i l'ordre de visualització.</li>
+                <li><strong>Editar:</strong> Modifiqueu directament a la taula i cliqueu "Desar".</li>
+                <li><strong>Desactivar:</strong> No s'eliminen, es desactiven (soft delete). No apareixeran al formulari del visitant però es conserven per a l'historial.</li>
+                <li><strong>Ordre:</strong> El número d'ordre determina la posició al desplegable del formulari (menor = primer).</li>
+            </ul>
+        </section>
+
+        <!-- 7. Textos legals -->
+        <section id="legal" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">7. Textos legals</h2>
+            <p class="text-gray-600 mb-3">Gestioneu les versions dels textos legals (normes + RGPD) que accepten els visitants:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Crear versió:</strong> Introduïu el contingut en els 4 idiomes. Admet HTML (negreta, llistes, paràgrafs).</li>
+                <li><strong>Activar:</strong> Només una versió pot estar activa a la vegada. En activar una, les anteriors es desactiven automàticament.</li>
+                <li><strong>Versionat:</strong> Cada visita guarda quina versió del document va acceptar el visitant. No s'eliminen versions anteriors.</li>
+                <li><strong>Hash:</strong> Cada versió té un hash SHA-256 del contingut per garantir la integritat.</li>
+            </ul>
+        </section>
+
+        <!-- 8. Usuaris -->
+        <section id="usuaris" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">8. Gestió d'usuaris</h2>
+            <p class="text-gray-600 mb-3">Administreu els usuaris que poden accedir al panell:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Crear:</strong> Email, nom, contrasenya (mínim 12 caràcters) i rol.</li>
+                <li><strong>Editar:</strong> Canvieu nom, rol o activeu/desactiveu directament a la taula.</li>
+                <li><strong>Reset contrasenya:</strong> Cliqueu "Reset pw" per canviar la contrasenya d'un usuari.</li>
+                <li><strong>Desactivar:</strong> Desmarqueu "Actiu" per bloquejar l'accés d'un usuari sense eliminar-lo.</li>
+            </ul>
+        </section>
+
+        <!-- 9. Rols -->
+        <section id="rols" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">9. Rols i permisos</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 text-gray-600 text-xs uppercase">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Funcionalitat</th>
+                            <th class="px-4 py-2 text-center">Admin</th>
+                            <th class="px-4 py-2 text-center">Recepcionista</th>
+                            <th class="px-4 py-2 text-center">Visualitzador</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <tr><td class="px-4 py-2">Dashboard (visites actives)</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td></tr>
+                        <tr><td class="px-4 py-2">Historial de visites</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td></tr>
+                        <tr><td class="px-4 py-2">Estadístiques</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td></tr>
+                        <tr><td class="px-4 py-2">Sortida manual</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td></tr>
+                        <tr><td class="px-4 py-2">Exportar Excel/CSV</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td></tr>
+                        <tr><td class="px-4 py-2">Veure DNI desxifrat</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td></tr>
+                        <tr><td class="px-4 py-2">Eliminar registre (RGPD)</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td></tr>
+                        <tr><td class="px-4 py-2">Gestió departaments</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td></tr>
+                        <tr><td class="px-4 py-2">Gestió textos legals</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td></tr>
+                        <tr><td class="px-4 py-2">Gestió usuaris</td><td class="px-4 py-2 text-center text-green-600">&#10003;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td><td class="px-4 py-2 text-center text-red-400">&#10007;</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 10. RGPD -->
+        <section id="rgpd" class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-3">10. Compliment RGPD</h2>
+            <p class="text-gray-600 mb-3">Mesures implementades per complir el Reglament General de Protecció de Dades:</p>
+            <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 ml-2">
+                <li><strong>Xifrat del DNI:</strong> El document d'identitat s'emmagatzema xifrat amb AES-256-GCM. Només es desxifra sota demanda amb confirmació de contrasenya.</li>
+                <li><strong>Minimització de dades:</strong> Només es recullen les dades estrictament necessàries. El telèfon és opcional.</li>
+                <li><strong>Consentiment informat:</strong> El visitant accepta explícitament les normes i la política de dades amb checkboxes separats i signatura manuscrita.</li>
+                <li><strong>Versionat del document legal:</strong> Cada visita registra quina versió exacta del text va acceptar el visitant.</li>
+                <li><strong>Timestamp precís:</strong> Es guarda el moment exacte de l'acceptació.</li>
+                <li><strong>Purga automàtica:</strong> Les visites amb més de 2 anys s'eliminen automàticament (script de neteja programat).</li>
+                <li><strong>Dret de supressió:</strong> L'admin pot eliminar qualsevol registre des del detall de la visita.</li>
+                <li><strong>Auditoria:</strong> Totes les accions sensibles (veure DNI, eliminar registre, sortida manual) queden registrades amb l'usuari, data i IP.</li>
+                <li><strong>Autoritats de control:</strong> El text legal informa del dret a reclamar davant l'AEPD i l'APDCAT.</li>
+            </ul>
+        </section>
+
+    </div>
+</div>
+{% endblock %}

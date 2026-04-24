@@ -202,10 +202,12 @@ async function viewIdDocument() {
 }
 
 async function deleteVisit() {
-    const resp = await fetch('/admin/visits/{{ visit.id }}', { method: 'DELETE' });
+    const resp = await fetch('/admin/visits/{{ visit.id }}/delete', { method: 'POST' });
     const data = await resp.json();
     if (data.ok) {
         window.location.href = '/admin/visits';
+    } else {
+        alert(data.error || 'Error eliminant el registre');
     }
 }
 </script>

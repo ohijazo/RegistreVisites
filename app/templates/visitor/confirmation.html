@@ -21,27 +21,8 @@
 
         <!-- Info sortida -->
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-            <p class="text-sm text-blue-700 font-medium mb-3">{{ t('confirmation_exit_info') }}</p>
-
-            <!-- PIN destacat -->
-            <div class="bg-white rounded-lg p-4 mb-3">
-                <p class="text-xs text-gray-500 mb-1">{{ t('confirmation_your_pin') }}</p>
-                <p class="text-4xl font-mono font-bold text-gray-800 tracking-widest">{{ visit.exit_pin }}</p>
-            </div>
-
-            <!-- DNI -->
-            <p class="text-sm text-blue-600">{{ t('confirmation_or_dni') }}</p>
+            <p class="text-sm text-blue-700">{{ t('confirmation_exit_dni') }}</p>
         </div>
-
-        <!-- QR discret (desplegable) -->
-        <details class="mb-4 text-left">
-            <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-600 text-center">
-                {{ t('confirmation_show_qr') }}
-            </summary>
-            <div class="mt-3 flex justify-center">
-                <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR Code" class="w-36 h-36">
-            </div>
-        </details>
 
         <!-- Sortida immediata -->
         <a href="/checkout/{{ visit.exit_token }}"
@@ -57,13 +38,11 @@
 </div>
 
 <script>
-    // Evitar que es torni enrere
     history.replaceState(null, '', window.location.href);
     window.addEventListener('popstate', function() {
         history.pushState(null, '', window.location.href);
     });
 
-    // Compte enrere i reset
     let secs = {{ kiosk_reset_seconds }};
     const countdown = document.getElementById('countdown');
     const timer = setInterval(function() {
