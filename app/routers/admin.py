@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone, timedelta, date
 
 from fastapi import APIRouter, Request, Depends, Form, Query, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, func, and_, or_, text, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -612,7 +612,13 @@ async def view_id_document(
     db.add(audit)
     await db.commit()
 
-    return {"id_document": id_doc}
+    return JSONResponse(
+        {"id_document": id_doc},
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, private",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 # ── Sortida manual ───────────────────────────────────────
@@ -825,7 +831,7 @@ async def stats_page(
         "dept_data": json.dumps(dept_data),
         "hourly_data": json.dumps(hourly_data),
         "top_companies": top_companies,
-        "raw_visits": json.dumps(raw_visits),
+        "raw_visits": raw_visits,
     })
     return templates.TemplateResponse(request, "admin/stats.html", context=ctx)
 

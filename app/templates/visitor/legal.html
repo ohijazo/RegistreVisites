@@ -9,8 +9,8 @@
 
     <!-- Contenidor de scroll per als textos legals -->
     <div id="legal-text"
-         class="border-2 border-gray-300 rounded-lg p-4 mb-3 overflow-y-auto bg-white text-sm text-gray-700 leading-relaxed"
-         style="max-height: 40vh;"
+         class="border-2 border-gray-300 rounded-lg p-4 mb-3 overflow-y-auto bg-white text-base text-gray-700 leading-relaxed"
+         style="max-height: 55vh;"
          onscroll="checkScroll()">
         {% if legal_doc %}
             {{ legal_doc|lang_attr('content_', lang)|safe }}

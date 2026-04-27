@@ -18,10 +18,14 @@
         {% set hours = minutes // 60 %}
         {% set mins = minutes % 60 %}
         <tr id="row-{{ visit.id }}"
-            class="cursor-pointer {% if hours >= max_hours_alert %}bg-red-50 hover:bg-red-100{% elif hours >= max_hours_warn %}bg-yellow-50 hover:bg-yellow-100{% else %}hover:bg-blue-50{% endif %}"
-            onclick="window.location.href='/admin/visits/{{ visit.id }}'">
+            class="{% if hours >= max_hours_alert %}bg-red-50 hover:bg-red-100{% elif hours >= max_hours_warn %}bg-yellow-50 hover:bg-yellow-100{% else %}hover:bg-blue-50{% endif %}">
             <td class="px-5 py-3 text-gray-500">{{ loop.index }}</td>
-            <td class="px-5 py-3 font-medium text-blue-700 underline">{{ visit.first_name }} {{ visit.last_name }}</td>
+            <td class="px-5 py-3 font-medium">
+                <a href="/admin/visits/{{ visit.id }}"
+                   class="text-blue-700 hover:text-blue-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+                    {{ visit.first_name }} {{ visit.last_name }}
+                </a>
+            </td>
             <td class="px-5 py-3 text-gray-600">{{ visit.company }}</td>
             <td class="px-5 py-3 text-gray-600">{{ visit.department.name_ca if visit.department else '—' }}</td>
             <td class="px-5 py-3 text-gray-600 max-w-xs truncate" title="{{ visit.visit_reason }}">{{ visit.visit_reason }}</td>
@@ -30,7 +34,7 @@
             <td class="px-5 py-3">
                 {% if admin.role in ['admin', 'receptionist'] %}
                 <button
-                    onclick="event.stopPropagation(); showCheckoutModal('{{ visit.id }}', '{{ visit.first_name }} {{ visit.last_name }}', '{{ visit.company }}')"
+                    onclick="showCheckoutModal('{{ visit.id }}', '{{ visit.first_name }} {{ visit.last_name }}', '{{ visit.company }}')"
                     class="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg transition">
                     Sortida manual
                 </button>
@@ -41,7 +45,7 @@
     </tbody>
 </table>
 {% else %}
-<div class="text-center py-12 text-gray-400">
+<div class="text-center py-12 text-gray-600">
     <p class="text-lg">No hi ha visites actives en aquest moment</p>
 </div>
 {% endif %}

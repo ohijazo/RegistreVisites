@@ -126,7 +126,7 @@
                 {% endfor %}
                 {% if not visits %}
                 <tr>
-                    <td colspan="8" class="px-5 py-8 text-center text-gray-400">No s'han trobat resultats</td>
+                    <td colspan="8" class="px-5 py-8 text-center text-gray-600">No s'han trobat resultats</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -148,7 +148,7 @@
             <a href="?page={{ p }}&date_from={{ filters.date_from or '' }}&date_to={{ filters.date_to or '' }}&company={{ filters.company }}&dept_id={{ filters.dept_id }}&name={{ filters.name }}&status={{ filters.status }}"
                class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">{{ p }}</a>
             {% elif (p - page)|abs == 3 %}
-            <span class="px-1 text-gray-400">...</span>
+            <span class="px-1 text-gray-600">...</span>
             {% endif %}
         {% endfor %}
 

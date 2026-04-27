@@ -75,11 +75,11 @@
                         {% endif %}
                     </td>
                     <td class="px-5 py-3 text-gray-500 text-xs max-w-xs truncate" title="{{ log.detail or '' }}">{{ log.detail or '—' }}</td>
-                    <td class="px-5 py-3 text-gray-400 text-xs">{{ log.ip_address or '—' }}</td>
+                    <td class="px-5 py-3 text-gray-600 text-xs">{{ log.ip_address or '—' }}</td>
                 </tr>
                 {% endfor %}
                 {% if not logs %}
-                <tr><td colspan="5" class="px-5 py-8 text-center text-gray-400">Sense registres</td></tr>
+                <tr><td colspan="5" class="px-5 py-8 text-center text-gray-600">Sense registres</td></tr>
                 {% endif %}
             </tbody>
         </table>

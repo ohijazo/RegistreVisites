@@ -31,7 +31,7 @@
                 Sortida massiva ({{ active_count }})
             </button>
             {% endif %}
-            <span class="text-xs text-gray-400" id="last-update"></span>
+            <span class="text-xs text-gray-600" id="last-update"></span>
         </div>
     </div>
     <div id="active-table"
@@ -106,7 +106,7 @@
         var resp = await fetch('/admin/visits/' + pendingCheckoutId + '/checkout', {method: 'POST'});
         if (resp.ok) {
             var row = document.getElementById('row-' + pendingCheckoutId);
-            if (row) row.innerHTML = '<td colspan="8" class="text-center text-gray-400 py-2">Sortida registrada</td>';
+            if (row) row.innerHTML = '<td colspan="8" class="text-center text-gray-600 py-2">Sortida registrada</td>';
         }
         pendingCheckoutId = null;
     }
@@ -145,9 +145,6 @@
         document.getElementById('change-msg').textContent = msg;
         el.classList.remove('hidden');
         setTimeout(function() { el.classList.add('hidden'); }, 8000);
-
-        // So d'alerta (opcional, si el navegador ho permet)
-        try { new Audio('data:audio/wav;base64,UklGRl9vT19teleWQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhQu8+AA==').play(); } catch(e) {}
     }
 </script>
 {% endblock %}
