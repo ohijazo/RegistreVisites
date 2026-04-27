@@ -2,7 +2,7 @@ import base64
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -11,10 +11,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.database import get_db
 from app.db.models import Department, LegalDocument, Visit
-from app.services.crypto import encrypt
+from app.services.crypto import encrypt, hash_id_document, normalize_id_document
 from app.services.i18n import t, SUPPORTED_LANGS
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
+
+
+def _is_kiosk_request(request: Request) -> bool:
+    """Comprova si la petició ve d'una tablet de quiosc autoritzada.
+
+    L'autorització és la conjunció de filtres configurats:
+      - KIOSK_IP_ALLOWLIST (CSV d'IPs): si està definit, la IP del client
+        ha de coincidir.
+      - KIOSK_SHARED_SECRET: si està definit, ha d'arribar el header
+        X-Kiosk-Secret igual al configurat (constant-time compare).
+    Si cap dels dos està configurat, en producció es bloqueja (config.py
+    no permet aquesta combinació en prod) i en dev passa.
+    """
+    if settings.KIOSK_IP_ALLOWLIST:
+        allowed = {ip.strip() for ip in settings.KIOSK_IP_ALLOWLIST.split(",") if ip.strip()}
+        client_ip = request.client.host if request.client else ""
+        if client_ip not in allowed:
+            return False
+    if settings.KIOSK_SHARED_SECRET:
+        provided = request.headers.get("X-Kiosk-Secret", "")
+        if not secrets.compare_digest(provided, settings.KIOSK_SHARED_SECRET):
+            return False
+    if not settings.KIOSK_IP_ALLOWLIST and not settings.KIOSK_SHARED_SECRET:
+        return settings.ENV != "production"
+    return True
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -116,6 +141,7 @@ async def submit_group(
             company=company,
             id_document_enc=enc,
             id_document_iv=iv,
+            id_document_hash=hash_id_document(dni),
             department_id=department_id,
             visit_reason=visit_reason,
             language=lang,
@@ -155,36 +181,44 @@ async def checkout_lang(lang: str, request: Request):
 
 
 @router.post("/api/lookup-visitor")
+@limiter.limit("20/minute;200/hour")
 async def lookup_visitor(
     request: Request,
     id_document: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
-    """Buscar si un DNI ja ha visitat abans i retornar les dades."""
-    if not id_document.strip():
+    """Buscar si un DNI ja ha visitat abans i retornar les dades.
+
+    Restringit a tablets de quiosc (IP allowlist + header secret). Cerca per
+    HMAC-SHA256 indexat — no desxifra cap registre.
+    """
+    if not _is_kiosk_request(request):
+        # 404 dissimulat — no revelar l'existència de l'endpoint.
+        raise HTTPException(status_code=404)
+
+    needle = normalize_id_document(id_document)
+    if len(needle) < 4:
         return {"found": False}
 
-    needle = id_document.strip().upper().replace(" ", "")
+    digest = hash_id_document(needle)
 
-    # Buscar l'última visita amb aquest DNI
     result = await db.execute(
-        select(Visit).order_by(Visit.checked_in_at.desc())
+        select(Visit)
+        .where(Visit.id_document_hash == digest)
+        .order_by(Visit.checked_in_at.desc())
+        .limit(1)
     )
-    for visit in result.scalars():
-        try:
-            decrypted = decrypt(visit.id_document_enc, visit.id_document_iv)
-            if decrypted.upper().replace(" ", "") == needle:
-                return {
-                    "found": True,
-                    "first_name": visit.first_name,
-                    "last_name": visit.last_name,
-                    "company": visit.company,
-                    "phone": visit.phone or "",
-                }
-        except Exception:
-            continue
+    visit = result.scalar_one_or_none()
+    if not visit:
+        return {"found": False}
 
-    return {"found": False}
+    return {
+        "found": True,
+        "first_name": visit.first_name,
+        "last_name": visit.last_name,
+        "company": visit.company,
+        "phone": visit.phone or "",
+    }
 
 
 @router.get("/{lang}/register", response_class=HTMLResponse)
@@ -350,8 +384,9 @@ async def submit_legal(
         ctx["error"] = error_msg
         return templates.TemplateResponse(request, "visitor/legal.html", ctx)
 
-    # Xifrar DNI
+    # Xifrar DNI i precalcular el hash per a cerca
     enc, iv = encrypt(session_data["id_document"])
+    id_hash = hash_id_document(session_data["id_document"])
 
     # Obtenir document legal actiu
     result = await db.execute(
@@ -372,6 +407,7 @@ async def submit_legal(
         company=session_data["company"],
         id_document_enc=enc,
         id_document_iv=iv,
+        id_document_hash=id_hash,
         phone=session_data.get("phone") or None,
         department_id=session_data["department_id"],
         visit_reason=session_data["visit_reason"],

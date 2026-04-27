@@ -171,8 +171,14 @@ async function lookupVisitor() {
     var formData = new FormData();
     formData.append('id_document', dni);
 
+    var headers = {};
+    {% if settings.KIOSK_SHARED_SECRET %}
+    headers['X-Kiosk-Secret'] = '{{ settings.KIOSK_SHARED_SECRET }}';
+    {% endif %}
+
     try {
-        var resp = await fetch('/api/lookup-visitor', {method: 'POST', body: formData});
+        var resp = await fetch('/api/lookup-visitor', {method: 'POST', body: formData, headers: headers});
+        if (!resp.ok) return;
         var data = await resp.json();
         if (data.found) {
             // Pre-omplir camps si estan buits

@@ -67,6 +67,7 @@ class Visit(Base):
     company = Column(String(200), nullable=False)
     id_document_enc = Column(LargeBinary, nullable=False)
     id_document_iv = Column(LargeBinary, nullable=False)
+    id_document_hash = Column(String(64), nullable=True, index=True)
     phone = Column(String(30))
 
     # Visita

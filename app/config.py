@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     SECRET_KEY: str = "canvia-aquesta-clau-secreta"
     JWT_SECRET_KEY: str = ""
+    LOOKUP_PEPPER: str = ""
+    KIOSK_SHARED_SECRET: str = ""
+    KIOSK_IP_ALLOWLIST: str = ""
 
     SESSION_HOURS: int = 8
     EXIT_TOKEN_HOURS: int = 8
@@ -66,6 +69,24 @@ def get_settings() -> Settings:
         s.JWT_SECRET_KEY = s.SECRET_KEY
     elif s.JWT_SECRET_KEY == s.SECRET_KEY and s.ENV == "production":
         print("ERROR: JWT_SECRET_KEY ha de ser diferent de SECRET_KEY en producció")
+        sys.exit(1)
+
+    # LOOKUP_PEPPER: obligatori en producció per evitar oràcles de DNI
+    if not s.LOOKUP_PEPPER and s.ENV == "production":
+        print("ERROR: LOOKUP_PEPPER no configurada en producció")
+        sys.exit(1)
+
+    # En producció, almenys un mecanisme d'autenticació de quiosc ha d'estar
+    # configurat per protegir els endpoints de cerca i checkout per DNI.
+    if (
+        s.ENV == "production"
+        and not s.KIOSK_IP_ALLOWLIST
+        and not s.KIOSK_SHARED_SECRET
+    ):
+        print(
+            "ERROR: Configura almenys KIOSK_IP_ALLOWLIST o KIOSK_SHARED_SECRET "
+            "en producció"
+        )
         sys.exit(1)
 
     return s
