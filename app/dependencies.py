@@ -15,7 +15,7 @@ async def get_current_admin(
     if not access_token:
         raise HTTPException(status_code=302, headers={"Location": "/admin/login"})
     try:
-        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(access_token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=302, headers={"Location": "/admin/login"})

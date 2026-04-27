@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://visites_user:password@localhost/visites_db"
     ENCRYPTION_KEY: str = ""
     SECRET_KEY: str = "canvia-aquesta-clau-secreta"
+    JWT_SECRET_KEY: str = ""
 
     SESSION_HOURS: int = 8
     EXIT_TOKEN_HOURS: int = 8
@@ -54,6 +55,17 @@ def get_settings() -> Settings:
     # Validar secret key
     if s.SECRET_KEY == "canvia-aquesta-clau-secreta" and s.ENV == "production":
         print("ERROR: SECRET_KEY per defecte en producció. Canvia-la al .env")
+        sys.exit(1)
+
+    # JWT_SECRET_KEY ha de ser diferent de SECRET_KEY en producció;
+    # en desenvolupament hi ha fallback a SECRET_KEY per comoditat.
+    if not s.JWT_SECRET_KEY:
+        if s.ENV == "production":
+            print("ERROR: JWT_SECRET_KEY no configurada en producció")
+            sys.exit(1)
+        s.JWT_SECRET_KEY = s.SECRET_KEY
+    elif s.JWT_SECRET_KEY == s.SECRET_KEY and s.ENV == "production":
+        print("ERROR: JWT_SECRET_KEY ha de ser diferent de SECRET_KEY en producció")
         sys.exit(1)
 
     return s

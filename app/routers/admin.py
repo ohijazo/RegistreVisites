@@ -3,7 +3,8 @@ import hashlib
 import json
 from datetime import datetime, timezone, timedelta, date
 
-from fastapi import APIRouter, Request, Depends, Form, Query, Response
+import bleach
+from fastapi import APIRouter, Request, Depends, Form, Query, Response, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, func, and_, or_, text, delete
@@ -12,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from jose import jwt
 
 from app.services.auth import hash_password, verify_password
+from app.services.rate_limit import limiter
 
 from app.config import settings
 from app.db.database import get_db
@@ -19,6 +21,18 @@ from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt
 from app.services.export import visits_to_excel, visits_to_csv
+
+MIN_ADMIN_PASSWORD_LEN = 12
+
+LEGAL_ALLOWED_TAGS = ["p", "br", "strong", "em", "u", "ol", "ul", "li",
+                      "h2", "h3", "h4", "a", "span"]
+LEGAL_ALLOWED_ATTRS = {"a": ["href", "title", "rel"]}
+
+
+def _clean_legal(html: str) -> str:
+    """Saneja HTML del contingut legal: només etiquetes inofensives."""
+    return bleach.clean(html or "", tags=LEGAL_ALLOWED_TAGS,
+                        attributes=LEGAL_ALLOWED_ATTRS, strip=True)
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/templates")
@@ -193,6 +207,7 @@ async def login_page(request: Request):
 
 
 @router.post("/login")
+@limiter.limit("5/minute;20/hour")
 async def login_submit(
     request: Request,
     email: str = Form(...),
@@ -228,7 +243,7 @@ async def login_submit(
             "sub": str(user.id),
             "exp": datetime.now(timezone.utc) + timedelta(hours=settings.SESSION_HOURS),
         },
-        settings.SECRET_KEY,
+        settings.JWT_SECRET_KEY,
         algorithm="HS256",
     )
 
@@ -676,7 +691,9 @@ async def delete_visit(
         delete(AuditLog).where(AuditLog.visit_id == visit_id)
     )
 
-    # Auditoria de l'eliminació (visit_id=None perquè la visita s'eliminarà)
+    # Auditoria de l'eliminació (visit_id=None perquè la visita s'eliminarà).
+    # No persistim PII (nom, cognoms, empresa) per complir el dret d'oblit
+    # RGPD: només l'identificador i la marca de temps de l'acció.
     audit = AuditLog(
         admin_id=admin.id,
         visit_id=None,
@@ -684,9 +701,7 @@ async def delete_visit(
         ip_address=request.client.host if request.client else None,
         detail=json.dumps({
             "visit_id": str(visit.id),
-            "first_name": visit.first_name,
-            "last_name": visit.last_name,
-            "company": visit.company,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
         }),
     )
     db.add(audit)
@@ -937,6 +952,11 @@ async def create_legal_doc(
     content_fr: str = Form(...),
     content_en: str = Form(...),
 ):
+    content_ca = _clean_legal(content_ca)
+    content_es = _clean_legal(content_es)
+    content_fr = _clean_legal(content_fr)
+    content_en = _clean_legal(content_en)
+
     content_hash = hashlib.sha256(
         (content_ca + content_es + content_fr + content_en).encode()
     ).hexdigest()
@@ -999,6 +1019,13 @@ async def create_user(
     password: str = Form(...),
     role: str = Form("receptionist"),
 ):
+    if len(password) < MIN_ADMIN_PASSWORD_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La contrasenya ha de tenir com a mínim {MIN_ADMIN_PASSWORD_LEN} caràcters.",
+        )
+    if role not in ("admin", "receptionist", "viewer"):
+        raise HTTPException(status_code=400, detail="Rol invàlid.")
     password_hash = hash_password(password)
     user = AdminUser(
         email=email,
@@ -1039,6 +1066,11 @@ async def reset_password(
     admin: AdminUser = Depends(require_role("admin")),
     password: str = Form(...),
 ):
+    if len(password) < MIN_ADMIN_PASSWORD_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La contrasenya ha de tenir com a mínim {MIN_ADMIN_PASSWORD_LEN} caràcters.",
+        )
     result = await db.execute(select(AdminUser).where(AdminUser.id == user_id))
     user = result.scalar_one_or_none()
     if user:
