@@ -12,6 +12,7 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import Department, LegalDocument, Visit
 from app.services.crypto import encrypt, hash_id_document, normalize_id_document
+from app.services.expected import auto_link_expected_visit
 from app.services.i18n import t, SUPPORTED_LANGS
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
@@ -119,7 +120,7 @@ async def submit_group(
     )
     legal_doc = legal_result.scalar_one_or_none()
 
-    created = 0
+    created_visits: list[Visit] = []
     for i in range(len(names)):
         name = (names[i] if i < len(names) else "").strip()
         dni = (dnis[i] if i < len(dnis) else "").strip().upper()
@@ -153,9 +154,9 @@ async def submit_group(
             exit_pin=exit_pin,
         )
         db.add(visit)
-        created += 1
+        created_visits.append(visit)
 
-    if created == 0:
+    if not created_visits:
         dept_result = await db.execute(
             select(Department).where(Department.active.is_(True)).order_by(Department.order)
         )
@@ -164,7 +165,13 @@ async def submit_group(
         ctx["error"] = t(lang, "error_required")
         return templates.TemplateResponse(request, "visitor/group.html", ctx)
 
+    # Flush perquè cada Visit tingui id assignat abans del matching, i
+    # aleshores intentar vincular-los amb visites previstes del dia.
+    await db.flush()
+    for v in created_visits:
+        await auto_link_expected_visit(v, db)
     await db.commit()
+    created = len(created_visits)
 
     ctx = _lang_context(lang)
     ctx["count"] = created
@@ -423,6 +430,10 @@ async def submit_legal(
     db.add(visit)
     await db.commit()
     await db.refresh(visit)
+
+    # Auto-vincle amb visita prevista del dia (nom + empresa)
+    await auto_link_expected_visit(visit, db)
+    await db.commit()
 
     # Netejar sessió
     request.session.pop("visit_draft", None)

@@ -143,6 +143,10 @@ class ExpectedVisit(Base):
     last_email_sent_at = Column(DateTime(timezone=True), nullable=True)
     last_email_recipients = Column(Text, nullable=True)
 
+    # Vincle amb la visita real un cop el visitant arriba al quiosc
+    visit_id = Column(UUID(as_uuid=True), ForeignKey("visits.id"), nullable=True)
+    visit = relationship("Visit", foreign_keys=[visit_id])
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

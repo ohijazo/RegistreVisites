@@ -52,6 +52,25 @@
     </div>
     {% endif %}
 
+    {% if item.visit %}
+    <div class="bg-green-50 border border-green-300 text-green-900 px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+        <div class="text-sm">
+            <span class="font-semibold">Visitant arribat el {{ item.visit.checked_in_at.strftime('%d/%m/%Y a les %H:%M') }}</span>
+            · Registrat com a <span class="font-medium">{{ item.visit.first_name }} {{ item.visit.last_name }}</span>
+            ({{ item.visit.company }})
+            {% if item.visit.checked_out_at %}
+            · Sortida a les {{ item.visit.checked_out_at.strftime('%H:%M') }}
+            {% else %}
+            · <span class="text-green-700 font-medium">Encara a les instal·lacions</span>
+            {% endif %}
+        </div>
+        <a href="/admin/visits/{{ item.visit.id }}"
+           class="text-sm bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap">
+            Veure registre →
+        </a>
+    </div>
+    {% endif %}
+
     <form method="POST" action="/admin/expected/{{ item.id }}/update" class="bg-white rounded-xl shadow-sm p-6 space-y-4">
         {% include "_csrf.html" %}
 

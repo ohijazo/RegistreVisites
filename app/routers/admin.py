@@ -21,6 +21,7 @@ from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog,
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt
 from app.services.email import send_email, smtp_configured
+from app.services.expected import find_matching_visit_for_expected
 from app.services.export import visits_to_excel, visits_to_csv
 
 MIN_ADMIN_PASSWORD_LEN = 12
@@ -614,8 +615,15 @@ async def visit_detail(
     if not visit:
         return RedirectResponse("/admin/visits", status_code=302)
 
+    # Si hi ha una visita prevista vinculada, la mostrem al detall
+    expected_result = await db.execute(
+        select(ExpectedVisit).where(ExpectedVisit.visit_id == visit.id)
+    )
+    expected = expected_result.scalar_one_or_none()
+
     ctx = _admin_context(admin)
     ctx["visit"] = visit
+    ctx["expected"] = expected
     return templates.TemplateResponse(request, "admin/visit_detail.html", context=ctx)
 
 
@@ -1300,6 +1308,7 @@ async def expected_detail(
         .options(
             selectinload(ExpectedVisit.department),
             selectinload(ExpectedVisit.created_by),
+            selectinload(ExpectedVisit.visit),
         )
     )
     item = result.scalar_one_or_none()
@@ -1370,6 +1379,12 @@ async def expected_mark_arrived(
     result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
     item = result.scalar_one_or_none()
     if item:
+        # Si encara no està vinculada, mirem si hi ha una visita registrada
+        # avui que hi coincideixi (mateix criteri que l'auto-vincle).
+        if item.visit_id is None:
+            matched = await find_matching_visit_for_expected(item, db)
+            if matched:
+                item.visit_id = matched.id
         item.status = "arrived"
         await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
