@@ -11,6 +11,36 @@
     <button onclick="this.parentElement.classList.add('hidden')" class="text-green-700 font-bold text-lg">&times;</button>
 </div>
 
+{% if expected_today_count %}
+<div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+    <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span class="text-sm font-semibold text-blue-900">
+                Avui s'esperen {{ expected_today_count }} {{ 'visita' if expected_today_count == 1 else 'visites' }} {{ 'prevista' if expected_today_count == 1 else 'previstes' }}
+            </span>
+        </div>
+        <a href="/admin/expected?range=today"
+           class="text-xs text-blue-700 hover:text-blue-900 font-medium">Veure totes →</a>
+    </div>
+    <ul class="text-sm text-gray-700 space-y-1">
+        {% for item in expected_today[:5] %}
+        <li class="flex items-center gap-2">
+            <span class="text-xs font-mono text-gray-600 w-12">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</span>
+            <a href="/admin/expected/{{ item.id }}" class="text-blue-700 hover:underline">{{ item.visitor_name }}</a>
+            {% if item.visitor_company %}<span class="text-gray-600">· {{ item.visitor_company }}</span>{% endif %}
+            <span class="text-gray-600">→ {{ item.host_name }}</span>
+        </li>
+        {% endfor %}
+        {% if expected_today_count > 5 %}
+        <li class="text-xs text-gray-600 italic">... i {{ expected_today_count - 5 }} {{ 'més' if expected_today_count - 5 == 1 else 'més' }}</li>
+        {% endif %}
+    </ul>
+</div>
+{% endif %}
+
 <!-- Targetes de resum -->
 <div id="stats-cards"
      hx-get="/admin/api/stats-cards"

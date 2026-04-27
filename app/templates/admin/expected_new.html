@@ -1,0 +1,84 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Nova visita prevista{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="flex items-center gap-3 mb-6">
+        <a href="/admin/expected" class="text-blue-600 hover:text-blue-800 text-sm">← Tornar</a>
+        <h1 class="text-2xl font-bold text-gray-800">Nova visita prevista</h1>
+    </div>
+
+    {% if error %}
+    <div class="bg-red-100 border-2 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-4 font-semibold" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/admin/expected" class="bg-white rounded-xl shadow-sm p-6 space-y-4">
+        {% include "_csrf.html" %}
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Nom del visitant <span class="text-red-500">*</span></label>
+                <input type="text" name="visitor_name" required maxlength="250"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
+                <input type="text" name="visitor_company" maxlength="200"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Telèfon</label>
+                <input type="tel" name="visitor_phone" maxlength="30"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Amfitrió <span class="text-red-500">*</span></label>
+                <input type="text" name="host_name" required maxlength="200" placeholder="Qui l'espera"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Data <span class="text-red-500">*</span></label>
+                <input type="date" name="expected_date" required
+                       value="{{ today_iso }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Hora aproximada</label>
+                <input type="time" name="expected_time"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Departament</label>
+                <select name="department_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="">—</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}">{{ dept.name_ca }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Motiu de la visita</label>
+                <input type="text" name="visit_reason" maxlength="500"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Notes internes</label>
+                <textarea name="notes" rows="2"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+            <a href="/admin/expected" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium transition">
+                Cancel·lar
+            </a>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                Crear visita prevista
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

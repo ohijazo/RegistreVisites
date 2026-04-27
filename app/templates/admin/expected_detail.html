@@ -1,0 +1,137 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Visita prevista{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl">
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <a href="/admin/expected" class="text-blue-600 hover:text-blue-800 text-sm">← Tornar al llistat</a>
+            <h1 class="text-2xl font-bold text-gray-800">Visita prevista</h1>
+        </div>
+        <div>
+            {% if item.status == 'pending' %}
+            <span class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full">Pendent</span>
+            {% elif item.status == 'arrived' %}
+            <span class="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">Arribada</span>
+            {% elif item.status == 'cancelled' %}
+            <span class="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full">Cancel·lada</span>
+            {% elif item.status == 'no_show' %}
+            <span class="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">No presentada</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="POST" action="/admin/expected/{{ item.id }}/update" class="bg-white rounded-xl shadow-sm p-6 space-y-4">
+        {% include "_csrf.html" %}
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Nom del visitant *</label>
+                <input type="text" name="visitor_name" required maxlength="250"
+                       value="{{ item.visitor_name }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
+                <input type="text" name="visitor_company" maxlength="200"
+                       value="{{ item.visitor_company or '' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Telèfon</label>
+                <input type="tel" name="visitor_phone" maxlength="30"
+                       value="{{ item.visitor_phone or '' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Amfitrió *</label>
+                <input type="text" name="host_name" required maxlength="200"
+                       value="{{ item.host_name }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Data *</label>
+                <input type="date" name="expected_date" required
+                       value="{{ item.expected_date.strftime('%Y-%m-%d') }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Hora aproximada</label>
+                <input type="time" name="expected_time"
+                       value="{{ item.expected_time.strftime('%H:%M') if item.expected_time else '' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Departament</label>
+                <select name="department_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                        {% if admin.role == 'viewer' %}disabled{% endif %}>
+                    <option value="">—</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if item.department_id and (item.department_id|string == dept.id|string) %}selected{% endif %}>
+                        {{ dept.name_ca }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Estat</label>
+                <select name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                        {% if admin.role == 'viewer' %}disabled{% endif %}>
+                    <option value="pending" {% if item.status == 'pending' %}selected{% endif %}>Pendent</option>
+                    <option value="arrived" {% if item.status == 'arrived' %}selected{% endif %}>Arribada</option>
+                    <option value="cancelled" {% if item.status == 'cancelled' %}selected{% endif %}>Cancel·lada</option>
+                    <option value="no_show" {% if item.status == 'no_show' %}selected{% endif %}>No presentada</option>
+                </select>
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Motiu de la visita</label>
+                <input type="text" name="visit_reason" maxlength="500"
+                       value="{{ item.visit_reason or '' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Notes internes</label>
+                <textarea name="notes" rows="2"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          {% if admin.role == 'viewer' %}disabled{% endif %}>{{ item.notes or '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="text-xs text-gray-600 pt-2 border-t border-gray-100">
+            Creada per {{ item.created_by.name if item.created_by else 'sistema' }}
+            el {{ item.created_at.strftime('%d/%m/%Y %H:%M') }}
+            {% if item.updated_at and item.updated_at != item.created_at %}
+            · Actualitzada el {{ item.updated_at.strftime('%d/%m/%Y %H:%M') }}
+            {% endif %}
+        </div>
+
+        {% if admin.role in ['admin', 'receptionist'] %}
+        <div class="flex gap-2 pt-2">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                Desar canvis
+            </button>
+        </div>
+        {% endif %}
+    </form>
+
+    {% if admin.role == 'admin' %}
+    <div class="mt-6 flex justify-end">
+        <form method="POST" action="/admin/expected/{{ item.id }}/delete"
+              onsubmit="return confirm('Eliminar definitivament aquesta visita prevista?');">
+            {% include "_csrf.html" %}
+            <button type="submit" class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                Eliminar registre
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

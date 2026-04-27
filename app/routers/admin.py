@@ -17,7 +17,7 @@ from app.services.rate_limit import limiter
 
 from app.config import settings
 from app.db.database import get_db
-from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog
+from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt
 from app.services.export import visits_to_excel, visits_to_csv
@@ -325,6 +325,19 @@ async def dashboard(
     alert_cutoff = now - timedelta(hours=settings.MAX_VISIT_HOURS_ALERT)
     long_stay_count = sum(1 for v in active_visits if v.checked_in_at <= alert_cutoff)
 
+    # Visites previstes per avui (només pendents)
+    today_date = now.date()
+    expected_today_result = await db.execute(
+        select(ExpectedVisit)
+        .options(selectinload(ExpectedVisit.department))
+        .where(
+            ExpectedVisit.expected_date == today_date,
+            ExpectedVisit.status == "pending",
+        )
+        .order_by(ExpectedVisit.expected_time.asc().nullslast())
+    )
+    expected_today = expected_today_result.scalars().all()
+
     ctx = _admin_context(admin)
     ctx.update({
         "active_visits": active_visits,
@@ -335,6 +348,8 @@ async def dashboard(
         "max_hours_warn": settings.MAX_VISIT_HOURS_WARN,
         "max_hours_alert": settings.MAX_VISIT_HOURS_ALERT,
         "long_stay_count": long_stay_count,
+        "expected_today": expected_today,
+        "expected_today_count": len(expected_today),
     })
     return templates.TemplateResponse(request, "admin/dashboard.html", context=ctx)
 
@@ -1095,3 +1110,249 @@ async def reset_password(
         user.last_logout_at = datetime.now(timezone.utc)
         await db.commit()
     return RedirectResponse("/admin/users", status_code=302)
+
+
+# ── Visites previstes ────────────────────────────────────
+
+EXPECTED_STATUSES = ("pending", "arrived", "cancelled", "no_show")
+
+
+def _parse_date_or(value: str, default):
+    if not value:
+        return default
+    try:
+        return date.fromisoformat(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _parse_time_or_none(value: str):
+    if not value:
+        return None
+    try:
+        # HTML <input type="time"> sol enviar HH:MM
+        return datetime.strptime(value, "%H:%M").time()
+    except ValueError:
+        try:
+            return datetime.strptime(value, "%H:%M:%S").time()
+        except ValueError:
+            return None
+
+
+@router.get("/expected", response_class=HTMLResponse)
+async def expected_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
+    range: str = Query("upcoming", pattern="^(today|week|upcoming|past|all)$"),
+    status_filter: str = Query("", alias="status"),
+):
+    today = datetime.now(timezone.utc).date()
+    stmt = select(ExpectedVisit).options(
+        selectinload(ExpectedVisit.department),
+        selectinload(ExpectedVisit.created_by),
+    )
+
+    if range == "today":
+        stmt = stmt.where(ExpectedVisit.expected_date == today)
+    elif range == "week":
+        stmt = stmt.where(
+            ExpectedVisit.expected_date >= today,
+            ExpectedVisit.expected_date <= today + timedelta(days=7),
+        )
+    elif range == "past":
+        stmt = stmt.where(ExpectedVisit.expected_date < today)
+    elif range == "upcoming":
+        stmt = stmt.where(ExpectedVisit.expected_date >= today)
+    # range == "all" → sense filtre de data
+
+    if status_filter in EXPECTED_STATUSES:
+        stmt = stmt.where(ExpectedVisit.status == status_filter)
+
+    # Futures: ordre cronològic ascendent. Passades: descendent (més recents primer).
+    if range == "past":
+        stmt = stmt.order_by(
+            ExpectedVisit.expected_date.desc(),
+            ExpectedVisit.expected_time.desc().nullslast(),
+        )
+    else:
+        stmt = stmt.order_by(
+            ExpectedVisit.expected_date.asc(),
+            ExpectedVisit.expected_time.asc().nullsfirst(),
+        )
+
+    result = await db.execute(stmt)
+    items = result.scalars().all()
+
+    ctx = _admin_context(admin)
+    ctx.update({
+        "items": items,
+        "range": range,
+        "status_filter": status_filter,
+    })
+    return templates.TemplateResponse(request, "admin/expected_list.html", ctx)
+
+
+@router.get("/expected/new", response_class=HTMLResponse)
+async def expected_new_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    dept_result = await db.execute(
+        select(Department).where(Department.active.is_(True)).order_by(Department.order)
+    )
+    ctx = _admin_context(admin)
+    ctx["departments"] = dept_result.scalars().all()
+    ctx["error"] = None
+    ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
+    return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
+
+
+@router.post("/expected")
+async def expected_create(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+    visitor_name: str = Form(...),
+    visitor_company: str = Form(""),
+    visitor_phone: str = Form(""),
+    host_name: str = Form(...),
+    department_id: str = Form(""),
+    expected_date: str = Form(...),
+    expected_time: str = Form(""),
+    visit_reason: str = Form(""),
+    notes: str = Form(""),
+):
+    parsed_date = _parse_date_or(expected_date, None)
+    if not parsed_date or not visitor_name.strip() or not host_name.strip():
+        dept_result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        ctx = _admin_context(admin)
+        ctx["departments"] = dept_result.scalars().all()
+        ctx["error"] = "Els camps Nom del visitant, Amfitrió i Data són obligatoris."
+        return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
+
+    item = ExpectedVisit(
+        visitor_name=visitor_name.strip(),
+        visitor_company=(visitor_company or "").strip() or None,
+        visitor_phone=(visitor_phone or "").strip() or None,
+        host_name=host_name.strip(),
+        department_id=department_id or None,
+        expected_date=parsed_date,
+        expected_time=_parse_time_or_none(expected_time),
+        visit_reason=(visit_reason or "").strip() or None,
+        notes=(notes or "").strip() or None,
+        status="pending",
+        created_by_id=admin.id,
+    )
+    db.add(item)
+    await db.commit()
+    return RedirectResponse("/admin/expected", status_code=302)
+
+
+@router.get("/expected/{item_id}", response_class=HTMLResponse)
+async def expected_detail(
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
+):
+    result = await db.execute(
+        select(ExpectedVisit)
+        .where(ExpectedVisit.id == item_id)
+        .options(
+            selectinload(ExpectedVisit.department),
+            selectinload(ExpectedVisit.created_by),
+        )
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        return RedirectResponse("/admin/expected", status_code=302)
+
+    dept_result = await db.execute(
+        select(Department).where(Department.active.is_(True)).order_by(Department.order)
+    )
+    ctx = _admin_context(admin)
+    ctx["item"] = item
+    ctx["departments"] = dept_result.scalars().all()
+    ctx["statuses"] = EXPECTED_STATUSES
+    return templates.TemplateResponse(request, "admin/expected_detail.html", ctx)
+
+
+@router.post("/expected/{item_id}/update")
+async def expected_update(
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+    visitor_name: str = Form(...),
+    visitor_company: str = Form(""),
+    visitor_phone: str = Form(""),
+    host_name: str = Form(...),
+    department_id: str = Form(""),
+    expected_date: str = Form(...),
+    expected_time: str = Form(""),
+    visit_reason: str = Form(""),
+    notes: str = Form(""),
+    status_in: str = Form("pending", alias="status"),
+):
+    result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        return RedirectResponse("/admin/expected", status_code=302)
+
+    parsed_date = _parse_date_or(expected_date, item.expected_date)
+    item.visitor_name = visitor_name.strip()
+    item.visitor_company = (visitor_company or "").strip() or None
+    item.visitor_phone = (visitor_phone or "").strip() or None
+    item.host_name = host_name.strip()
+    item.department_id = department_id or None
+    item.expected_date = parsed_date
+    item.expected_time = _parse_time_or_none(expected_time)
+    item.visit_reason = (visit_reason or "").strip() or None
+    item.notes = (notes or "").strip() or None
+    if status_in in EXPECTED_STATUSES:
+        item.status = status_in
+    await db.commit()
+    return RedirectResponse(f"/admin/expected/{item.id}", status_code=302)
+
+
+@router.post("/expected/{item_id}/mark-arrived")
+async def expected_mark_arrived(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
+    item = result.scalar_one_or_none()
+    if item:
+        item.status = "arrived"
+        await db.commit()
+    return RedirectResponse("/admin/expected", status_code=302)
+
+
+@router.post("/expected/{item_id}/cancel")
+async def expected_cancel(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
+    item = result.scalar_one_or_none()
+    if item:
+        item.status = "cancelled"
+        await db.commit()
+    return RedirectResponse("/admin/expected", status_code=302)
+
+
+@router.post("/expected/{item_id}/delete")
+async def expected_delete(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+):
+    await db.execute(delete(ExpectedVisit).where(ExpectedVisit.id == item_id))
+    await db.commit()
+    return RedirectResponse("/admin/expected", status_code=302)

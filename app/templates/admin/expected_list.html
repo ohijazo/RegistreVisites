@@ -1,0 +1,119 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Visites previstes{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Visites previstes</h1>
+    {% if admin.role in ['admin', 'receptionist'] %}
+    <a href="/admin/expected/new"
+       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+        + Nova visita prevista
+    </a>
+    {% endif %}
+</div>
+
+<!-- Filtres -->
+<div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+    <form method="GET" action="/admin/expected" class="flex flex-wrap gap-3 items-end">
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">Període</label>
+            <select name="range" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="today" {% if range == 'today' %}selected{% endif %}>Avui</option>
+                <option value="week" {% if range == 'week' %}selected{% endif %}>Aquesta setmana</option>
+                <option value="upcoming" {% if range == 'upcoming' %}selected{% endif %}>Totes futures</option>
+                <option value="past" {% if range == 'past' %}selected{% endif %}>Passades</option>
+                <option value="all" {% if range == 'all' %}selected{% endif %}>Totes</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">Estat</label>
+            <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="" {% if not status_filter %}selected{% endif %}>Tots</option>
+                <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pendent</option>
+                <option value="arrived" {% if status_filter == 'arrived' %}selected{% endif %}>Arribada</option>
+                <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancel·lada</option>
+                <option value="no_show" {% if status_filter == 'no_show' %}selected{% endif %}>No presentada</option>
+            </select>
+        </div>
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+            Aplicar
+        </button>
+        <a href="/admin/expected" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium transition">
+            Netejar
+        </a>
+    </form>
+</div>
+
+<!-- Llista -->
+<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200 text-sm text-gray-600">
+        {{ items|length }} {{ 'visita' if items|length == 1 else 'visites' }}
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600 text-xs uppercase">
+                <tr>
+                    <th class="px-5 py-3 text-left">Data</th>
+                    <th class="px-5 py-3 text-left">Hora</th>
+                    <th class="px-5 py-3 text-left">Visitant</th>
+                    <th class="px-5 py-3 text-left">Empresa</th>
+                    <th class="px-5 py-3 text-left">Amfitrió</th>
+                    <th class="px-5 py-3 text-left">Departament</th>
+                    <th class="px-5 py-3 text-left">Estat</th>
+                    <th class="px-5 py-3 text-left">Accions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for item in items %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-3 text-gray-800 whitespace-nowrap">{{ item.expected_date.strftime('%d/%m/%Y') }}</td>
+                    <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
+                        {{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}
+                    </td>
+                    <td class="px-5 py-3 font-medium">
+                        <a href="/admin/expected/{{ item.id }}"
+                           class="text-blue-700 hover:text-blue-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+                            {{ item.visitor_name }}
+                        </a>
+                    </td>
+                    <td class="px-5 py-3 text-gray-600">{{ item.visitor_company or '—' }}</td>
+                    <td class="px-5 py-3 text-gray-600">{{ item.host_name }}</td>
+                    <td class="px-5 py-3 text-gray-600">{{ item.department.name_ca if item.department else '—' }}</td>
+                    <td class="px-5 py-3 whitespace-nowrap">
+                        {% if item.status == 'pending' %}
+                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Pendent</span>
+                        {% elif item.status == 'arrived' %}
+                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Arribada</span>
+                        {% elif item.status == 'cancelled' %}
+                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">Cancel·lada</span>
+                        {% elif item.status == 'no_show' %}
+                        <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">No presentada</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-3 whitespace-nowrap">
+                        {% if admin.role in ['admin', 'receptionist'] and item.status == 'pending' %}
+                        <form method="POST" action="/admin/expected/{{ item.id }}/mark-arrived" class="inline">
+                            {% include "_csrf.html" %}
+                            <button type="submit" class="text-xs bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">Marcar arribada</button>
+                        </form>
+                        <form method="POST" action="/admin/expected/{{ item.id }}/cancel" class="inline ml-1">
+                            {% include "_csrf.html" %}
+                            <button type="submit" class="text-xs bg-gray-300 hover:bg-gray-400 text-gray-700 px-2 py-1 rounded">Cancel·lar</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not items %}
+                <tr>
+                    <td colspan="8" class="px-5 py-8 text-center text-gray-600">
+                        No hi ha visites previstes per aquests filtres.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

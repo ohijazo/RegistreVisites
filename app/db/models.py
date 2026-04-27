@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, String, Boolean, DateTime, Text,
+    Column, String, Boolean, Date, DateTime, Text, Time,
     ForeignKey, LargeBinary, Integer,
 )
 from sqlalchemy.dialects.postgresql import UUID, INET
@@ -108,6 +108,36 @@ class AdminUser(Base):
     last_login = Column(DateTime(timezone=True))
     last_logout_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow)
+
+
+class ExpectedVisit(Base):
+    """Visites planificades pel personal intern. Es consulten al dashboard
+    i a la llista pròpia; no es vinculen automàticament amb Visit (text
+    lliure de l'amfitrió). Un admin/recepcionista pot marcar-les com
+    arribada / cancel·lada manualment."""
+    __tablename__ = "expected_visits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    visitor_name = Column(String(250), nullable=False)
+    visitor_company = Column(String(200))
+    visitor_phone = Column(String(30))
+
+    host_name = Column(String(200), nullable=False)
+    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
+    department = relationship("Department")
+
+    expected_date = Column(Date, nullable=False, index=True)
+    expected_time = Column(Time, nullable=True)
+    visit_reason = Column(Text)
+    notes = Column(Text)
+
+    # 'pending' | 'arrived' | 'cancelled' | 'no_show'
+    status = Column(String(20), default="pending", nullable=False, index=True)
+
+    created_by_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"))
+    created_by = relationship("AdminUser")
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class AuditLog(Base):
