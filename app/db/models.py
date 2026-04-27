@@ -118,7 +118,8 @@ class ExpectedVisit(Base):
     __tablename__ = "expected_visits"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    visitor_name = Column(String(250), nullable=False)
+    visitor_first_name = Column(String(100), nullable=False)
+    visitor_last_name = Column(String(150))
     visitor_company = Column(String(200))
     visitor_phone = Column(String(30))
 

@@ -29,7 +29,7 @@
         {% for item in expected_today[:5] %}
         <li class="flex items-center gap-2">
             <span class="text-xs font-mono text-gray-600 w-12">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</span>
-            <a href="/admin/expected/{{ item.id }}" class="text-blue-700 hover:underline">{{ item.visitor_name }}</a>
+            <a href="/admin/expected/{{ item.id }}" class="text-blue-700 hover:underline">{{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}</a>
             {% if item.visitor_company %}<span class="text-gray-600">· {{ item.visitor_company }}</span>{% endif %}
             <span class="text-gray-600">→ {{ item.host_name }}</span>
         </li>

@@ -76,9 +76,16 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Nom del visitant *</label>
-                <input type="text" name="visitor_name" required maxlength="250"
-                       value="{{ item.visitor_name }}"
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Nom *</label>
+                <input type="text" name="visitor_first_name" required maxlength="100"
+                       value="{{ item.visitor_first_name }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                       {% if admin.role == 'viewer' %}disabled{% endif %}>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Cognoms</label>
+                <input type="text" name="visitor_last_name" maxlength="150"
+                       value="{{ item.visitor_last_name or '' }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                        {% if admin.role == 'viewer' %}disabled{% endif %}>
             </div>
@@ -96,7 +103,7 @@
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                        {% if admin.role == 'viewer' %}disabled{% endif %}>
             </div>
-            <div>
+            <div class="sm:col-span-2">
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Amfitrió *</label>
                 <input type="text" name="host_name" required maxlength="200"
                        value="{{ item.host_name }}"

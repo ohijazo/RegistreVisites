@@ -67,7 +67,9 @@ async def auto_link_expected_visit(
 
     matches: list[ExpectedVisit] = []
     for exp in candidates:
-        exp_tokens = _normalize_tokens(exp.visitor_name)
+        exp_tokens = _normalize_tokens(
+            f"{exp.visitor_first_name} {exp.visitor_last_name or ''}"
+        )
         if not exp_tokens or not exp_tokens.issubset(visit_tokens):
             continue
         if exp.visitor_company:
@@ -105,7 +107,9 @@ async def find_matching_visit_for_expected(
     if not visits:
         return None
 
-    exp_tokens = _normalize_tokens(expected.visitor_name)
+    exp_tokens = _normalize_tokens(
+        f"{expected.visitor_first_name} {expected.visitor_last_name or ''}"
+    )
     if not exp_tokens:
         return None
     exp_company = (

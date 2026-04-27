@@ -1223,7 +1223,8 @@ async def expected_create(
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist")),
-    visitor_name: str = Form(...),
+    visitor_first_name: str = Form(...),
+    visitor_last_name: str = Form(""),
     visitor_company: str = Form(""),
     visitor_phone: str = Form(""),
     host_name: str = Form(...),
@@ -1234,17 +1235,19 @@ async def expected_create(
     notes: str = Form(""),
 ):
     parsed_date = _parse_date_or(expected_date, None)
-    if not parsed_date or not visitor_name.strip() or not host_name.strip():
+    if not parsed_date or not visitor_first_name.strip() or not host_name.strip():
         dept_result = await db.execute(
             select(Department).where(Department.active.is_(True)).order_by(Department.order)
         )
         ctx = _admin_context(admin)
         ctx["departments"] = dept_result.scalars().all()
         ctx["error"] = "Els camps Nom del visitant, Amfitrió i Data són obligatoris."
+        ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
         return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
 
     item = ExpectedVisit(
-        visitor_name=visitor_name.strip(),
+        visitor_first_name=visitor_first_name.strip(),
+        visitor_last_name=(visitor_last_name or "").strip() or None,
         visitor_company=(visitor_company or "").strip() or None,
         visitor_phone=(visitor_phone or "").strip() or None,
         host_name=host_name.strip(),
@@ -1261,16 +1264,25 @@ async def expected_create(
     return RedirectResponse("/admin/expected", status_code=302)
 
 
+def _expected_full_name(item: ExpectedVisit) -> str:
+    """Retorna el nom complet formatat per mostrar / cercar."""
+    parts = [item.visitor_first_name or ""]
+    if item.visitor_last_name:
+        parts.append(item.visitor_last_name)
+    return " ".join(p for p in parts if p).strip()
+
+
 def _build_email_defaults(item: ExpectedVisit) -> tuple[str, str]:
     """Assumpte i cos prefilats per a la notificació d'una visita prevista."""
-    subject = f"Visita prevista: {item.visitor_name} el {item.expected_date.strftime('%d/%m/%Y')}"
+    full_name = _expected_full_name(item)
+    subject = f"Visita prevista: {full_name} el {item.expected_date.strftime('%d/%m/%Y')}"
 
     lines = [
         "Hola,",
         "",
         "Us notifico la visita prevista següent:",
         "",
-        f"Visitant: {item.visitor_name}",
+        f"Visitant: {full_name}",
     ]
     if item.visitor_company:
         lines.append(f"Empresa: {item.visitor_company}")
@@ -1338,7 +1350,8 @@ async def expected_update(
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist")),
-    visitor_name: str = Form(...),
+    visitor_first_name: str = Form(...),
+    visitor_last_name: str = Form(""),
     visitor_company: str = Form(""),
     visitor_phone: str = Form(""),
     host_name: str = Form(...),
@@ -1355,7 +1368,8 @@ async def expected_update(
         return RedirectResponse("/admin/expected", status_code=302)
 
     parsed_date = _parse_date_or(expected_date, item.expected_date)
-    item.visitor_name = visitor_name.strip()
+    item.visitor_first_name = visitor_first_name.strip()
+    item.visitor_last_name = (visitor_last_name or "").strip() or None
     item.visitor_company = (visitor_company or "").strip() or None
     item.visitor_phone = (visitor_phone or "").strip() or None
     item.host_name = host_name.strip()
