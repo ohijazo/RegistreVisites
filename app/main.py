@@ -73,11 +73,26 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             submitted = request.headers.get(CSRF_HEADER)
             if not submitted:
                 ct = request.headers.get("content-type", "") or ""
-                if ct.startswith("application/x-www-form-urlencoded") or ct.startswith("multipart/form-data"):
-                    form = await request.form()
-                    submitted = form.get(CSRF_FIELD, "")
-                    # Re-injectar el form perquè el handler l'aprofiti sense rellegir
-                    request._form = form
+                if ct.startswith("application/x-www-form-urlencoded"):
+                    # Llegir el body un cop i re-injectar-lo a request._receive
+                    # perquè el handler downstream el pugui consumir.
+                    # BaseHTTPMiddleware passa request.receive al downstream, i
+                    # _form cached al middleware no es propaga (Request nou).
+                    from urllib.parse import parse_qs
+                    body_bytes = await request.body()
+
+                    async def replay():
+                        return {"type": "http.request", "body": body_bytes, "more_body": False}
+
+                    request._receive = replay
+                    parsed = parse_qs(body_bytes.decode("utf-8", errors="ignore"))
+                    submitted = (parsed.get(CSRF_FIELD) or [""])[0]
+                elif ct.startswith("multipart/form-data"):
+                    # Per a multipart cal el header X-CSRF-Token (rar perquè
+                    # els forms del projecte són tots application/x-www-form-
+                    # urlencoded; els fetch/HTMX que enviïn multipart han
+                    # d'incloure el header explícitament).
+                    pass
             if not validate_token(submitted, cookie):
                 return JSONResponse({"detail": "CSRF token invàlid o absent"}, status_code=403)
 
