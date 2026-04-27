@@ -1164,6 +1164,35 @@ async def profile_save(
 
 EXPECTED_STATUSES = ("pending", "arrived", "cancelled", "no_show")
 
+# Alias del builtin per usar-lo dins de funcions on `range` és el nom d'un
+# paràmetre Query.
+range_builtin = range
+
+
+async def _log_expected_status_change(
+    db: AsyncSession,
+    request: Request,
+    admin: AdminUser,
+    item: "ExpectedVisit",
+    old_status: str,
+    new_status: str,
+) -> None:
+    """Auditoria centralitzada per als canvis d'estat d'una visita prevista."""
+    if old_status == new_status:
+        return
+    db.add(AuditLog(
+        admin_id=admin.id,
+        visit_id=None,
+        action="expected_status_changed",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({
+            "expected_id": str(item.id),
+            "from": old_status,
+            "to": new_status,
+            "visitor": f"{item.visitor_first_name} {item.visitor_last_name or ''}".strip(),
+        }),
+    ))
+
 
 def _parse_date_or(value: str, default):
     if not value:
@@ -1187,6 +1216,68 @@ def _parse_time_or_none(value: str):
             return None
 
 
+EXPECTED_PER_PAGE = 50
+
+EXPECTED_SORT_OPTIONS = {
+    "date": (ExpectedVisit.expected_date, ExpectedVisit.expected_time),
+    "host": (ExpectedVisit.host_name,),
+    "visitor": (ExpectedVisit.visitor_first_name, ExpectedVisit.visitor_last_name),
+    "company": (ExpectedVisit.visitor_company,),
+    "status": (ExpectedVisit.status,),
+}
+
+
+def _build_expected_query(
+    *,
+    today,
+    range_val: str,
+    status_filter: str,
+    mine_active: bool,
+    host_alias: str | None,
+    q: str,
+    sort: str,
+    order: str,
+):
+    """Construeix una select(...) amb els filtres d'expected_list.
+    Retorna l'statement sense load options ni offset/limit."""
+    stmt = select(ExpectedVisit)
+
+    if range_val == "today":
+        stmt = stmt.where(ExpectedVisit.expected_date == today)
+    elif range_val == "week":
+        stmt = stmt.where(
+            ExpectedVisit.expected_date >= today,
+            ExpectedVisit.expected_date <= today + timedelta(days=7),
+        )
+    elif range_val == "past":
+        stmt = stmt.where(ExpectedVisit.expected_date < today)
+    elif range_val == "upcoming":
+        stmt = stmt.where(ExpectedVisit.expected_date >= today)
+
+    if status_filter in EXPECTED_STATUSES:
+        stmt = stmt.where(ExpectedVisit.status == status_filter)
+
+    if mine_active and host_alias:
+        stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{host_alias}%"))
+
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(
+            ExpectedVisit.visitor_first_name.ilike(like),
+            ExpectedVisit.visitor_last_name.ilike(like),
+            ExpectedVisit.visitor_company.ilike(like),
+            ExpectedVisit.host_name.ilike(like),
+            ExpectedVisit.visit_reason.ilike(like),
+        ))
+
+    sort_cols = EXPECTED_SORT_OPTIONS.get(sort, EXPECTED_SORT_OPTIONS["date"])
+    if order == "desc":
+        stmt = stmt.order_by(*[c.desc().nullslast() for c in sort_cols])
+    else:
+        stmt = stmt.order_by(*[c.asc().nullslast() for c in sort_cols])
+    return stmt
+
+
 @router.get("/expected", response_class=HTMLResponse)
 async def expected_list(
     request: Request,
@@ -1195,49 +1286,48 @@ async def expected_list(
     range: str = Query("today", pattern="^(today|week|upcoming|past|all)$"),
     status_filter: str = Query("", alias="status"),
     mine: str = Query(""),
+    q: str = Query(""),
+    sort: str = Query("date", pattern="^(date|host|visitor|company|status)$"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    page: int = Query(1, ge=1),
 ):
     today = datetime.now(timezone.utc).date()
-    stmt = select(ExpectedVisit).options(
-        selectinload(ExpectedVisit.department),
-        selectinload(ExpectedVisit.created_by),
-        selectinload(ExpectedVisit.visit),
+    mine_active = bool(mine) and bool(admin.host_alias)
+    q_stripped = (q or "").strip()
+    # Si l'usuari ha demanat ordre 'past', la convenció anterior era descendent
+    # per defecte. Mantenim aquest hàbit només si no s'ha tocat sort/order.
+    effective_order = order
+    if range == "past" and order == "asc" and sort == "date":
+        effective_order = "desc"
+
+    base = _build_expected_query(
+        today=today,
+        range_val=range,
+        status_filter=status_filter,
+        mine_active=mine_active,
+        host_alias=admin.host_alias,
+        q=q_stripped,
+        sort=sort,
+        order=effective_order,
     )
 
-    if range == "today":
-        stmt = stmt.where(ExpectedVisit.expected_date == today)
-    elif range == "week":
-        stmt = stmt.where(
-            ExpectedVisit.expected_date >= today,
-            ExpectedVisit.expected_date <= today + timedelta(days=7),
+    # Comptar totals abans de paginar
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_stmt)).scalar() or 0
+    total_pages = max(1, (total + EXPECTED_PER_PAGE - 1) // EXPECTED_PER_PAGE)
+    page = min(page, total_pages)
+
+    paged = (
+        base.options(
+            selectinload(ExpectedVisit.department),
+            selectinload(ExpectedVisit.created_by),
+            selectinload(ExpectedVisit.visit),
         )
-    elif range == "past":
-        stmt = stmt.where(ExpectedVisit.expected_date < today)
-    elif range == "upcoming":
-        stmt = stmt.where(ExpectedVisit.expected_date >= today)
-    # range == "all" → sense filtre de data
+        .offset((page - 1) * EXPECTED_PER_PAGE)
+        .limit(EXPECTED_PER_PAGE)
+    )
 
-    if status_filter in EXPECTED_STATUSES:
-        stmt = stmt.where(ExpectedVisit.status == status_filter)
-
-    # Filtre "Les meves": match difús amb host_alias del perfil
-    mine_active = bool(mine) and bool(admin.host_alias)
-    if mine_active:
-        stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%"))
-
-    # Futures: ordre cronològic ascendent. Passades: descendent (més recents primer).
-    if range == "past":
-        stmt = stmt.order_by(
-            ExpectedVisit.expected_date.desc(),
-            ExpectedVisit.expected_time.desc().nullslast(),
-        )
-    else:
-        stmt = stmt.order_by(
-            ExpectedVisit.expected_date.asc(),
-            ExpectedVisit.expected_time.asc().nullsfirst(),
-        )
-
-    result = await db.execute(stmt)
-    items = result.scalars().all()
+    items = (await db.execute(paged)).scalars().all()
 
     ctx = _admin_context(admin)
     ctx.update({
@@ -1245,11 +1335,35 @@ async def expected_list(
         "range": range,
         "status_filter": status_filter,
         "mine_active": mine_active,
+        "q": q_stripped,
+        "sort": sort,
+        "order": effective_order,
+        "page": page,
+        "total": total,
+        "total_pages": total_pages,
+        "per_page": EXPECTED_PER_PAGE,
+        "page_numbers": list(range_builtin(1, total_pages + 1)),
         "any_filter_applied": (
-            range != "today" or bool(status_filter) or mine_active
+            range != "today" or bool(status_filter) or mine_active or bool(q_stripped)
         ),
     })
     return templates.TemplateResponse(request, "admin/expected_list.html", ctx)
+
+
+@router.get("/api/host-suggestions")
+async def api_host_suggestions(
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Llista distinta dels últims amfitrions usats (per a datalist)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=180)
+    result = await db.execute(
+        select(ExpectedVisit.host_name)
+        .where(ExpectedVisit.created_at >= cutoff)
+        .distinct()
+        .order_by(ExpectedVisit.host_name)
+    )
+    return {"hosts": [row[0] for row in result if row[0]]}
 
 
 @router.get("/expected/new", response_class=HTMLResponse)
@@ -1369,6 +1483,181 @@ def _build_email_defaults(item: ExpectedVisit) -> tuple[str, str]:
     return subject, "\n".join(lines)
 
 
+# ─── Vistes especials de visites previstes (cal declarar-les abans del
+# /expected/{item_id} perquè FastAPI captura per ordre de declaració). ───
+
+@router.get("/expected/print", response_class=HTMLResponse)
+async def expected_print(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
+    range: str = Query("today", pattern="^(today|tomorrow|week|date)$"),
+    date: str = Query(""),
+    mine: str = Query(""),
+):
+    """Vista imprimible de les visites previstes (per al cap o recepció)."""
+    today = datetime.now(timezone.utc).date()
+    mine_active = bool(mine) and bool(admin.host_alias)
+
+    if range == "today":
+        date_from, date_to = today, today
+        title = "Visites previstes per a avui"
+    elif range == "tomorrow":
+        d = today + timedelta(days=1)
+        date_from, date_to = d, d
+        title = "Visites previstes per a demà"
+    elif range == "week":
+        date_from, date_to = today, today + timedelta(days=6)
+        title = "Visites previstes (7 dies)"
+    elif range == "date":
+        d = _parse_date_or(date, today)
+        date_from, date_to = d, d
+        title = f"Visites previstes per al {d.strftime('%d/%m/%Y')}"
+    else:
+        date_from, date_to = today, today
+        title = "Visites previstes"
+
+    stmt = (
+        select(ExpectedVisit)
+        .options(selectinload(ExpectedVisit.department))
+        .where(
+            ExpectedVisit.expected_date >= date_from,
+            ExpectedVisit.expected_date <= date_to,
+            ExpectedVisit.status.in_(["pending", "arrived"]),
+        )
+        .order_by(
+            ExpectedVisit.expected_date.asc(),
+            ExpectedVisit.expected_time.asc().nullslast(),
+        )
+    )
+    if mine_active:
+        stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%"))
+
+    items = (await db.execute(stmt)).scalars().all()
+
+    return templates.TemplateResponse(
+        request,
+        "admin/expected_print.html",
+        {
+            "items": items,
+            "title": title,
+            "now": datetime.now(timezone.utc),
+            "settings": settings,
+            "admin": admin,
+            "mine_active": mine_active,
+        },
+    )
+
+
+@router.get("/expected/calendar", response_class=HTMLResponse)
+async def expected_calendar(
+    request: Request,
+    admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
+):
+    ctx = _admin_context(admin)
+    return templates.TemplateResponse(request, "admin/expected_calendar.html", ctx)
+
+
+@router.get("/api/expected-events")
+async def api_expected_events(
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+    start: str = Query(""),
+    end: str = Query(""),
+    mine: str = Query(""),
+):
+    """Esdeveniments per a FullCalendar. Format compatible amb la lib."""
+    today = datetime.now(timezone.utc).date()
+    start_d = _parse_date_or(start, today - timedelta(days=30))
+    end_d = _parse_date_or(end, today + timedelta(days=60))
+    mine_active = bool(mine) and bool(admin.host_alias)
+
+    stmt = (
+        select(ExpectedVisit)
+        .where(
+            ExpectedVisit.expected_date >= start_d,
+            ExpectedVisit.expected_date <= end_d,
+        )
+        .order_by(ExpectedVisit.expected_date.asc())
+    )
+    if mine_active:
+        stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%"))
+
+    items = (await db.execute(stmt)).scalars().all()
+
+    color_by_status = {
+        "pending": "#3b82f6",
+        "arrived": "#10b981",
+        "cancelled": "#9ca3af",
+        "no_show": "#f59e0b",
+    }
+
+    events = []
+    for it in items:
+        full_name = f"{it.visitor_first_name} {it.visitor_last_name or ''}".strip()
+        time_str = it.expected_time.strftime("%H:%M") if it.expected_time else ""
+        title = f"{time_str} {full_name} → {it.host_name}".strip()
+        # Si hi ha hora, fem un esdeveniment amb timestamp; sinó, all-day
+        if it.expected_time:
+            start_iso = datetime.combine(it.expected_date, it.expected_time).isoformat()
+            events.append({
+                "id": str(it.id),
+                "title": title,
+                "start": start_iso,
+                "url": f"/admin/expected/{it.id}",
+                "backgroundColor": color_by_status.get(it.status, "#3b82f6"),
+                "borderColor": color_by_status.get(it.status, "#3b82f6"),
+            })
+        else:
+            events.append({
+                "id": str(it.id),
+                "title": title,
+                "start": it.expected_date.isoformat(),
+                "allDay": True,
+                "url": f"/admin/expected/{it.id}",
+                "backgroundColor": color_by_status.get(it.status, "#3b82f6"),
+                "borderColor": color_by_status.get(it.status, "#3b82f6"),
+            })
+    return events
+
+
+@router.get("/api/expected-banner", response_class=HTMLResponse)
+async def api_expected_banner(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+    expected_mine: str = "",
+):
+    """Fragment HTML del bàner de visites previstes (per a HTMX live update)."""
+    today_date = datetime.now(timezone.utc).date()
+    mine_active = bool(expected_mine) and bool(admin.host_alias)
+    stmt = (
+        select(ExpectedVisit)
+        .options(selectinload(ExpectedVisit.department))
+        .where(
+            ExpectedVisit.expected_date == today_date,
+            ExpectedVisit.status.in_(["pending", "arrived"]),
+        )
+        .order_by(ExpectedVisit.expected_time.asc().nullslast())
+    )
+    if mine_active:
+        stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%"))
+    expected_today = (await db.execute(stmt)).scalars().all()
+
+    return templates.TemplateResponse(
+        request,
+        "admin/_expected_banner.html",
+        {
+            "admin": admin,
+            "expected_today": expected_today,
+            "expected_today_count": len(expected_today),
+            "expected_pending_count": sum(1 for e in expected_today if e.status == "pending"),
+            "expected_arrived_count": sum(1 for e in expected_today if e.status == "arrived"),
+            "expected_mine_active": mine_active,
+        },
+    )
+
+
 @router.get("/expected/{item_id}", response_class=HTMLResponse)
 async def expected_detail(
     item_id: str,
@@ -1384,6 +1673,7 @@ async def expected_detail(
         .options(
             selectinload(ExpectedVisit.department),
             selectinload(ExpectedVisit.created_by),
+            selectinload(ExpectedVisit.last_updated_by),
             selectinload(ExpectedVisit.visit),
         )
     )
@@ -1432,6 +1722,7 @@ async def expected_update(
         return RedirectResponse("/admin/expected", status_code=302)
 
     parsed_date = _parse_date_or(expected_date, item.expected_date)
+    old_status = item.status
     item.visitor_first_name = visitor_first_name.strip()
     item.visitor_last_name = (visitor_last_name or "").strip() or None
     item.visitor_company = (visitor_company or "").strip() or None
@@ -1444,6 +1735,7 @@ async def expected_update(
     item.notes = (notes or "").strip() or None
     if status_in in EXPECTED_STATUSES:
         item.status = status_in
+    item.last_updated_by_id = admin.id
 
     # Si l'admin canvia l'estat a 'arrived' i encara no hi ha vincle,
     # intentem trobar una visita real del dia que coincideixi (mateix
@@ -1453,6 +1745,7 @@ async def expected_update(
         if matched:
             item.visit_id = matched.id
 
+    await _log_expected_status_change(db, request, admin, item, old_status, item.status)
     await db.commit()
     return RedirectResponse(f"/admin/expected/{item.id}", status_code=302)
 
@@ -1460,12 +1753,14 @@ async def expected_update(
 @router.post("/expected/{item_id}/mark-arrived")
 async def expected_mark_arrived(
     item_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist")),
 ):
     result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
     item = result.scalar_one_or_none()
     if item:
+        old_status = item.status
         # Si encara no està vinculada, mirem si hi ha una visita registrada
         # avui que hi coincideixi (mateix criteri que l'auto-vincle).
         if item.visit_id is None:
@@ -1473,6 +1768,8 @@ async def expected_mark_arrived(
             if matched:
                 item.visit_id = matched.id
         item.status = "arrived"
+        item.last_updated_by_id = admin.id
+        await _log_expected_status_change(db, request, admin, item, old_status, "arrived")
         await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
 
@@ -1480,13 +1777,17 @@ async def expected_mark_arrived(
 @router.post("/expected/{item_id}/cancel")
 async def expected_cancel(
     item_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist")),
 ):
     result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
     item = result.scalar_one_or_none()
     if item:
+        old_status = item.status
         item.status = "cancelled"
+        item.last_updated_by_id = admin.id
+        await _log_expected_status_change(db, request, admin, item, old_status, "cancelled")
         await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
 

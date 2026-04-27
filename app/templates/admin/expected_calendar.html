@@ -1,0 +1,97 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Calendari de visites previstes{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<style>
+    /* Compactar el calendari per encaixar-lo amb el panell admin */
+    .fc { font-size: 13px; }
+    .fc-event { cursor: pointer; }
+    .fc-toolbar-title { font-size: 1.25rem !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <h1 class="text-2xl font-bold text-gray-800">Calendari de visites previstes</h1>
+    <div class="flex items-center gap-2 flex-wrap">
+        {% if admin.host_alias %}
+        <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border border-gray-300 bg-white">
+            <input type="checkbox" id="mine-toggle" class="w-4 h-4 text-blue-600 rounded">
+            Només les meves
+        </label>
+        {% endif %}
+        <a href="/admin/expected" class="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">Vista llistat</a>
+        {% if admin.role in ['admin', 'receptionist'] %}
+        <a href="/admin/expected/new" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">+ Nova visita prevista</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm p-4">
+    <div id="calendar"></div>
+</div>
+
+<div class="mt-3 flex items-center gap-4 flex-wrap text-xs text-gray-600">
+    <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#3b82f6"></span> Pendent</span>
+    <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#10b981"></span> Arribada</span>
+    <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#9ca3af"></span> Cancel·lada</span>
+    <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#f59e0b"></span> No presentada</span>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var mineToggle = document.getElementById('mine-toggle');
+
+    function buildEventsUrl(info) {
+        var params = new URLSearchParams();
+        if (info.startStr) params.set('start', info.startStr.slice(0, 10));
+        if (info.endStr) params.set('end', info.endStr.slice(0, 10));
+        if (mineToggle && mineToggle.checked) params.set('mine', '1');
+        return '/admin/api/expected-events?' + params.toString();
+    }
+
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ca',
+        firstDay: 1,
+        height: 'auto',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,listWeek'
+        },
+        buttonText: {
+            today: 'Avui',
+            month: 'Mes',
+            week: 'Setmana',
+            list: 'Llista'
+        },
+        events: function(info, successCallback, failureCallback) {
+            fetch(buildEventsUrl(info))
+                .then(function(r) { return r.json(); })
+                .then(successCallback)
+                .catch(failureCallback);
+        },
+        eventClick: function(info) {
+            // FullCalendar ja navega amb el camp `url` dels esdeveniments
+            // però ens assegurem d'obrir-ho a la mateixa pestanya
+            info.jsEvent.preventDefault();
+            if (info.event.url) window.location.href = info.event.url;
+        }
+    });
+    calendar.render();
+
+    if (mineToggle) {
+        mineToggle.addEventListener('change', function() {
+            calendar.refetchEvents();
+        });
+    }
+});
+</script>
+{% endblock %}

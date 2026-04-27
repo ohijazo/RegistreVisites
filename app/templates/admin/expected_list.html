@@ -2,23 +2,52 @@
 
 {% block title %}Visites previstes{% endblock %}
 
+{% macro sort_link(field, label, sort, order) -%}
+{%- set new_order = 'desc' if sort == field and order == 'asc' else 'asc' -%}
+<a href="?range={{ range }}&status={{ status_filter }}{% if mine_active %}&mine=1{% endif %}{% if q %}&q={{ q }}{% endif %}&sort={{ field }}&order={{ new_order }}"
+   class="hover:text-gray-900 inline-flex items-center gap-1">
+    {{ label }}
+    {%- if sort == field %}
+    <span class="text-blue-600">{% if order == 'asc' %}↑{% else %}↓{% endif %}</span>
+    {%- endif %}
+</a>
+{%- endmacro %}
+
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
     <h1 class="text-2xl font-bold text-gray-800">Visites previstes</h1>
-    {% if admin.role in ['admin', 'receptionist'] %}
-    <a href="/admin/expected/new"
-       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
-        + Nova visita prevista
-    </a>
-    {% endif %}
+    <div class="flex items-center gap-2 flex-wrap">
+        <a href="/admin/expected/calendar"
+           class="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            Calendari
+        </a>
+        <a href="/admin/expected/print?range={{ range if range in ['today','tomorrow','week'] else 'today' }}{% if mine_active %}&mine=1{% endif %}"
+           target="_blank"
+           class="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            Imprimir
+        </a>
+        {% if admin.role in ['admin', 'receptionist'] %}
+        <a href="/admin/expected/new"
+           class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+            + Nova visita prevista
+        </a>
+        {% endif %}
+    </div>
 </div>
 
 <!-- Filtres -->
 <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
-    <form method="GET" action="/admin/expected" class="flex flex-wrap gap-3 items-end">
+    <form method="GET" action="/admin/expected" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="lg:col-span-4">
+            <label class="block text-xs text-gray-600 mb-1">Cerca lliure</label>
+            <input type="text" name="q" value="{{ q }}" placeholder="Cerca per nom, empresa, amfitrió o motiu..."
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
         <div>
             <label class="block text-xs text-gray-600 mb-1">Període</label>
-            <select name="range" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <select name="range" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
                 <option value="today" {% if range == 'today' %}selected{% endif %}>Avui</option>
                 <option value="week" {% if range == 'week' %}selected{% endif %}>Aquesta setmana</option>
                 <option value="upcoming" {% if range == 'upcoming' %}selected{% endif %}>Totes futures</option>
@@ -28,7 +57,7 @@
         </div>
         <div>
             <label class="block text-xs text-gray-600 mb-1">Estat</label>
-            <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <select name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
                 <option value="" {% if not status_filter %}selected{% endif %}>Tots</option>
                 <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pendent</option>
                 <option value="arrived" {% if status_filter == 'arrived' %}selected{% endif %}>Arribada</option>
@@ -37,19 +66,22 @@
             </select>
         </div>
         {% if admin.host_alias %}
-        <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border {% if mine_active %}border-blue-400 bg-blue-50 text-blue-700 font-medium{% else %}border-gray-300 bg-white{% endif %}">
-            <input type="checkbox" name="mine" value="1" {% if mine_active %}checked{% endif %}
-                   onchange="this.form.submit()"
-                   class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-            Només les meves
-        </label>
+        <div class="flex items-end">
+            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border w-full {% if mine_active %}border-blue-400 bg-blue-50 text-blue-700 font-medium{% else %}border-gray-300 bg-white{% endif %}">
+                <input type="checkbox" name="mine" value="1" {% if mine_active %}checked{% endif %}
+                       class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                Només les meves
+            </label>
+        </div>
         {% endif %}
-        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
-            Aplicar
-        </button>
-        <a href="/admin/expected" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium transition">
-            Netejar
-        </a>
+        <div class="flex items-end gap-2 lg:col-span-{{ 4 if not admin.host_alias else 4 }}">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                Cercar
+            </button>
+            <a href="/admin/expected" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium transition">
+                Netejar
+            </a>
+        </div>
     </form>
     {% if not admin.host_alias %}
     <p class="text-xs text-gray-600 mt-3">
@@ -62,34 +94,42 @@
 <!-- Llista -->
 <div class="bg-white rounded-xl shadow-sm overflow-hidden">
     <div class="px-5 py-3 border-b border-gray-200 text-sm text-gray-600">
-        {{ items|length }} {{ 'visita' if items|length == 1 else 'visites' }}
+        {% if total %}
+        Mostrant {{ ((page - 1) * per_page) + 1 }}–{{ [page * per_page, total]|min }} de {{ total }}
+        {% else %}
+        Sense resultats
+        {% endif %}
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead class="bg-gray-50 text-gray-600 text-xs uppercase">
                 <tr>
-                    <th class="px-5 py-3 text-left">Data</th>
-                    <th class="px-5 py-3 text-left">Hora</th>
-                    <th class="px-5 py-3 text-left">Visitant</th>
-                    <th class="px-5 py-3 text-left">Empresa</th>
-                    <th class="px-5 py-3 text-left">Amfitrió</th>
+                    <th class="px-5 py-3 text-left">{{ sort_link('date', 'Data / Hora', sort, order) }}</th>
+                    <th class="px-5 py-3 text-left">{{ sort_link('visitor', 'Visitant', sort, order) }}</th>
+                    <th class="px-5 py-3 text-left">{{ sort_link('company', 'Empresa', sort, order) }}</th>
+                    <th class="px-5 py-3 text-left">{{ sort_link('host', 'Amfitrió', sort, order) }}</th>
                     <th class="px-5 py-3 text-left">Departament</th>
-                    <th class="px-5 py-3 text-left">Estat</th>
+                    <th class="px-5 py-3 text-left">{{ sort_link('status', 'Estat', sort, order) }}</th>
                     <th class="px-5 py-3 text-left">Accions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
                 {% for item in items %}
                 <tr class="hover:bg-gray-50 {% if item.status in ('arrived', 'cancelled', 'no_show') %}opacity-70 bg-gray-50{% endif %}">
-                    <td class="px-5 py-3 text-gray-800 whitespace-nowrap">{{ item.expected_date.strftime('%d/%m/%Y') }}</td>
-                    <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
-                        {{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}
+                    <td class="px-5 py-3 text-gray-800 whitespace-nowrap">
+                        {{ item.expected_date.strftime('%d/%m/%Y') }}
+                        {% if item.expected_time %}
+                        <span class="text-xs font-mono text-gray-600">{{ item.expected_time.strftime('%H:%M') }}</span>
+                        {% endif %}
                     </td>
                     <td class="px-5 py-3 font-medium">
                         <a href="/admin/expected/{{ item.id }}"
                            class="text-blue-700 hover:text-blue-900 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
                             {{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}
                         </a>
+                        {% if item.visitor_phone %}
+                        <a href="tel:{{ item.visitor_phone }}" class="ml-1 text-blue-500 hover:text-blue-700" title="Trucar a {{ item.visitor_phone }}">📞</a>
+                        {% endif %}
                     </td>
                     <td class="px-5 py-3 text-gray-600">{{ item.visitor_company or '—' }}</td>
                     <td class="px-5 py-3 text-gray-600">{{ item.host_name }}</td>
@@ -125,7 +165,7 @@
                 {% endfor %}
                 {% if not items %}
                 <tr>
-                    <td colspan="8" class="px-12 py-12 text-center">
+                    <td colspan="7" class="px-12 py-12 text-center">
                         <p class="text-gray-600 text-base mb-4">
                             {% if any_filter_applied %}
                             Cap visita prevista coincideix amb aquests filtres.
@@ -151,5 +191,27 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Paginació -->
+    {% if total_pages > 1 %}
+    {% set qs = "range=" ~ range ~ "&status=" ~ status_filter ~ ("&mine=1" if mine_active else "") ~ ("&q=" ~ q if q else "") ~ "&sort=" ~ sort ~ "&order=" ~ order %}
+    <div class="px-5 py-3 border-t border-gray-200 flex items-center justify-center gap-1">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&{{ qs }}" class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">← Anterior</a>
+        {% endif %}
+        {% for p in page_numbers %}
+            {% if p == page %}
+            <span class="px-3 py-1 text-sm rounded bg-blue-600 text-white">{{ p }}</span>
+            {% elif (p - page)|abs <= 2 or p == 1 or p == total_pages %}
+            <a href="?page={{ p }}&{{ qs }}" class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">{{ p }}</a>
+            {% elif (p - page)|abs == 3 %}
+            <span class="px-1 text-gray-600">...</span>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}&{{ qs }}" class="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50">Següent →</a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

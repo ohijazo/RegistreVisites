@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} — {{ settings.COMPANY_NAME }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; padding: 1.5cm; font-size: 11pt; color: #222; }
+        .header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 15px; }
+        .header h1 { color: #1e40af; font-size: 20pt; }
+        .header .meta { text-align: right; font-size: 9pt; color: #555; }
+        .summary { margin-bottom: 15px; font-size: 11pt; color: #444; }
+        .summary strong { color: #1e40af; font-size: 14pt; }
+        table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        th { background: #1e40af; color: white; padding: 8px 10px; text-align: left; font-size: 9pt; text-transform: uppercase; }
+        td { padding: 8px 10px; border-bottom: 1px solid #ddd; vertical-align: top; }
+        tr:nth-child(even) { background: #f7f8fa; }
+        td.time { font-family: monospace; white-space: nowrap; }
+        td.host { font-weight: 600; }
+        .status { font-size: 8pt; padding: 2px 6px; border-radius: 10px; display: inline-block; }
+        .status-pending { background: #dbeafe; color: #1e40af; }
+        .status-arrived { background: #dcfce7; color: #166534; }
+        .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 8pt; color: #666; }
+        .checkbox { width: 18px; height: 18px; border: 1.5px solid #555; display: inline-block; }
+        @media print {
+            body { padding: 1cm; }
+            @page { margin: 1cm; size: A4 portrait; }
+            .print-btn, .no-print { display: none !important; }
+        }
+        @media screen {
+            .print-btn {
+                position: fixed; top: 20px; right: 20px; z-index: 100;
+                background: #1e40af; color: white; border: none; padding: 12px 24px;
+                font-size: 13pt; font-weight: bold; border-radius: 8px; cursor: pointer;
+            }
+            .print-btn:hover { background: #1e3a8a; }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn" onclick="window.print()">IMPRIMIR</button>
+
+    <div class="header">
+        <div>
+            <h1>{{ title }}</h1>
+            <p>{{ settings.COMPANY_NAME }}</p>
+        </div>
+        <div class="meta">
+            <p>Generat: {{ now.strftime('%d/%m/%Y %H:%M') }}</p>
+            <p>Per: {{ admin.name }}</p>
+            {% if mine_active %}<p><strong>Filtre:</strong> les meves ({{ admin.host_alias }})</p>{% endif %}
+        </div>
+    </div>
+
+    <div class="summary">
+        Total: <strong>{{ items|length }}</strong> {{ 'visita' if items|length == 1 else 'visites' }} previstes
+    </div>
+
+    {% if items %}
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 22px;">✓</th>
+                <th style="width: 80px;">Data</th>
+                <th style="width: 60px;">Hora</th>
+                <th>Visitant</th>
+                <th>Empresa</th>
+                <th>Telèfon</th>
+                <th>Amfitrió</th>
+                <th>Departament</th>
+                <th>Motiu</th>
+                <th style="width: 80px;">Estat</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td><span class="checkbox"></span></td>
+                <td>{{ item.expected_date.strftime('%d/%m') }}</td>
+                <td class="time">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</td>
+                <td><strong>{{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}</strong></td>
+                <td>{{ item.visitor_company or '—' }}</td>
+                <td>{{ item.visitor_phone or '—' }}</td>
+                <td class="host">{{ item.host_name }}</td>
+                <td>{{ item.department.name_ca if item.department else '—' }}</td>
+                <td>{{ item.visit_reason or '—' }}</td>
+                <td>
+                    {% if item.status == 'pending' %}
+                    <span class="status status-pending">Pendent</span>
+                    {% elif item.status == 'arrived' %}
+                    <span class="status status-arrived">Arribada</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 30px; font-size: 12pt; color: #666;">
+        No hi ha visites previstes per a aquest període.
+    </p>
+    {% endif %}
+
+    <div class="footer">
+        Generat automàticament pel Sistema de Registre de Visites de {{ settings.COMPANY_NAME }} · {{ now.strftime('%d/%m/%Y %H:%M:%S') }}
+    </div>
+</body>
+</html>

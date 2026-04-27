@@ -137,9 +137,11 @@ class ExpectedVisit(Base):
     status = Column(String(20), default="pending", nullable=False, index=True)
 
     created_by_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"))
-    created_by = relationship("AdminUser")
+    created_by = relationship("AdminUser", foreign_keys=[created_by_id])
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    last_updated_by_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"))
+    last_updated_by = relationship("AdminUser", foreign_keys=[last_updated_by_id])
 
     # Notificació per email (enviament manual)
     last_email_sent_at = Column(DateTime(timezone=True), nullable=True)
