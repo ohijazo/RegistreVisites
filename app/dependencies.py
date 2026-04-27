@@ -17,6 +17,7 @@ async def get_current_admin(
     try:
         payload = jwt.decode(access_token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
         user_id = payload.get("sub")
+        iat = payload.get("iat", 0)
         if not user_id:
             raise HTTPException(status_code=302, headers={"Location": "/admin/login"})
     except JWTError:
@@ -28,6 +29,11 @@ async def get_current_admin(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=302, headers={"Location": "/admin/login"})
+
+    # Invalidar tokens emesos abans de l'últim logout (o reset de password)
+    if user.last_logout_at and iat < int(user.last_logout_at.timestamp()):
+        raise HTTPException(status_code=302, headers={"Location": "/admin/login"})
+
     return user
 
 

@@ -9,6 +9,7 @@
 <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <h2 class="text-sm font-semibold text-gray-700 mb-3">Nou departament</h2>
     <form method="POST" action="/admin/departments" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        {% include "_csrf.html" %}
         <input type="text" name="name_ca" required placeholder="Nom (CA)"
                class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <input type="text" name="name_es" required placeholder="Nombre (ES)"
@@ -28,6 +29,19 @@
     </form>
 </div>
 
+{# Forms fora de la taula per evitar HTML invàlid (form dins tr).
+   Els inputs/botons s'hi vinculen via l'atribut form="...". #}
+{% for dept in departments %}
+<form id="form-dept-update-{{ dept.id }}" method="POST" action="/admin/departments/{{ dept.id }}/update">
+    {% include "_csrf.html" %}
+</form>
+{% if dept.active %}
+<form id="form-dept-delete-{{ dept.id }}" method="POST" action="/admin/departments/{{ dept.id }}/delete">
+    {% include "_csrf.html" %}
+</form>
+{% endif %}
+{% endfor %}
+
 <!-- Llista -->
 <div class="bg-white rounded-xl shadow-sm overflow-hidden">
     <table class="w-full text-sm">
@@ -44,39 +58,43 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
             {% for dept in departments %}
+            {% set fid = "form-dept-update-" ~ dept.id %}
             <tr class="{% if not dept.active %}opacity-50{% endif %}">
-                <form method="POST" action="/admin/departments/{{ dept.id }}/update">
-                    <td class="px-5 py-3">
-                        <input type="number" name="order" value="{{ dept.order }}" class="border rounded px-2 py-1 w-16 text-sm">
-                    </td>
-                    <td class="px-5 py-3">
-                        <input type="text" name="name_ca" value="{{ dept.name_ca }}" class="border rounded px-2 py-1 text-sm w-full">
-                    </td>
-                    <td class="px-5 py-3">
-                        <input type="text" name="name_es" value="{{ dept.name_es }}" class="border rounded px-2 py-1 text-sm w-full">
-                    </td>
-                    <td class="px-5 py-3">
-                        <input type="text" name="name_fr" value="{{ dept.name_fr }}" class="border rounded px-2 py-1 text-sm w-full">
-                    </td>
-                    <td class="px-5 py-3">
-                        <input type="text" name="name_en" value="{{ dept.name_en }}" class="border rounded px-2 py-1 text-sm w-full">
-                    </td>
-                    <td class="px-5 py-3">
-                        {% if dept.active %}
-                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Actiu</span>
-                        {% else %}
-                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Inactiu</span>
-                        {% endif %}
-                    </td>
-                    <td class="px-5 py-3 flex gap-1">
-                        <button type="submit" class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Desar</button>
-                </form>
-                        {% if dept.active %}
-                        <form method="POST" action="/admin/departments/{{ dept.id }}/delete">
-                            <button type="submit" class="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Desactivar</button>
-                        </form>
-                        {% endif %}
-                    </td>
+                <td class="px-5 py-3">
+                    <input form="{{ fid }}" type="number" name="order" value="{{ dept.order }}"
+                           class="border rounded px-2 py-1 w-16 text-sm">
+                </td>
+                <td class="px-5 py-3">
+                    <input form="{{ fid }}" type="text" name="name_ca" value="{{ dept.name_ca }}"
+                           class="border rounded px-2 py-1 text-sm w-full">
+                </td>
+                <td class="px-5 py-3">
+                    <input form="{{ fid }}" type="text" name="name_es" value="{{ dept.name_es }}"
+                           class="border rounded px-2 py-1 text-sm w-full">
+                </td>
+                <td class="px-5 py-3">
+                    <input form="{{ fid }}" type="text" name="name_fr" value="{{ dept.name_fr }}"
+                           class="border rounded px-2 py-1 text-sm w-full">
+                </td>
+                <td class="px-5 py-3">
+                    <input form="{{ fid }}" type="text" name="name_en" value="{{ dept.name_en }}"
+                           class="border rounded px-2 py-1 text-sm w-full">
+                </td>
+                <td class="px-5 py-3">
+                    {% if dept.active %}
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Actiu</span>
+                    {% else %}
+                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Inactiu</span>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-3 flex gap-1">
+                    <button form="{{ fid }}" type="submit"
+                            class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Desar</button>
+                    {% if dept.active %}
+                    <button form="form-dept-delete-{{ dept.id }}" type="submit"
+                            class="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Desactivar</button>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

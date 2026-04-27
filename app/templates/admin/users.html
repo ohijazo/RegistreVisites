@@ -9,6 +9,7 @@
 <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <h2 class="text-sm font-semibold text-gray-700 mb-3">Nou usuari</h2>
     <form method="POST" action="/admin/users" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        {% include "_csrf.html" %}
         <input type="email" name="email" required placeholder="Email"
                class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <input type="text" name="name" required placeholder="Nom complet"
@@ -27,6 +28,13 @@
     </form>
 </div>
 
+{# Forms d'actualització fora de la taula (vinculats per form="..."). #}
+{% for user in users %}
+<form id="form-user-update-{{ user.id }}" method="POST" action="/admin/users/{{ user.id }}/update">
+    {% include "_csrf.html" %}
+</form>
+{% endfor %}
+
 <!-- Llista -->
 <div class="bg-white rounded-xl shadow-sm overflow-hidden">
     <table class="w-full text-sm">
@@ -42,39 +50,41 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
             {% for user in users %}
+            {% set fid = "form-user-update-" ~ user.id %}
             <tr class="{% if not user.active %}opacity-50{% endif %}">
-                <form method="POST" action="/admin/users/{{ user.id }}/update">
-                    <td class="px-5 py-3">
-                        <input type="text" name="name" value="{{ user.name }}" class="border rounded px-2 py-1 text-sm w-full">
-                    </td>
-                    <td class="px-5 py-3 text-gray-600">{{ user.email }}</td>
-                    <td class="px-5 py-3">
-                        <select name="role" class="border rounded px-2 py-1 text-sm bg-white">
-                            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
-                            <option value="receptionist" {% if user.role == 'receptionist' %}selected{% endif %}>Recepcionista</option>
-                            <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>Visualitzador</option>
-                        </select>
-                    </td>
-                    <td class="px-5 py-3">
-                        <label class="flex items-center gap-1">
-                            <input type="checkbox" name="active" {% if user.active %}checked{% endif %} value="on">
-                            <span class="text-xs">Actiu</span>
-                        </label>
-                    </td>
-                    <td class="px-5 py-3 text-gray-500 text-xs">
-                        {{ user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login else 'Mai' }}
-                    </td>
-                    <td class="px-5 py-3 flex gap-1">
-                        <button type="submit" class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Desar</button>
-                </form>
-                        <button onclick="document.getElementById('reset-{{ user.id }}').classList.toggle('hidden')"
-                                class="text-xs bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600">Reset pw</button>
-                    </td>
+                <td class="px-5 py-3">
+                    <input form="{{ fid }}" type="text" name="name" value="{{ user.name }}"
+                           class="border rounded px-2 py-1 text-sm w-full">
+                </td>
+                <td class="px-5 py-3 text-gray-600">{{ user.email }}</td>
+                <td class="px-5 py-3">
+                    <select form="{{ fid }}" name="role" class="border rounded px-2 py-1 text-sm bg-white">
+                        <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                        <option value="receptionist" {% if user.role == 'receptionist' %}selected{% endif %}>Recepcionista</option>
+                        <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>Visualitzador</option>
+                    </select>
+                </td>
+                <td class="px-5 py-3">
+                    <label class="flex items-center gap-1">
+                        <input form="{{ fid }}" type="checkbox" name="active" {% if user.active %}checked{% endif %} value="on">
+                        <span class="text-xs">Actiu</span>
+                    </label>
+                </td>
+                <td class="px-5 py-3 text-gray-500 text-xs">
+                    {{ user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login else 'Mai' }}
+                </td>
+                <td class="px-5 py-3 flex gap-1">
+                    <button form="{{ fid }}" type="submit"
+                            class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Desar</button>
+                    <button onclick="document.getElementById('reset-{{ user.id }}').classList.toggle('hidden')"
+                            class="text-xs bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600">Reset pw</button>
+                </td>
             </tr>
-            <!-- Reset password inline -->
+            <!-- Reset password inline (form propi en TR separat — vàlid HTML) -->
             <tr id="reset-{{ user.id }}" class="hidden bg-yellow-50">
                 <td colspan="6" class="px-5 py-3">
                     <form method="POST" action="/admin/users/{{ user.id }}/reset-password" class="flex gap-2 items-center">
+                        {% include "_csrf.html" %}
                         <span class="text-sm text-gray-600">Nova contrasenya per {{ user.name }}:</span>
                         <input type="password" name="password" required minlength="12" placeholder="Mín. 12 caràcters"
                                class="border rounded px-2 py-1 text-sm w-48">

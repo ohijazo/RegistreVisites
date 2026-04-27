@@ -175,6 +175,7 @@
 <div class="mt-6 flex gap-3 no-print" id="btn-actions">
     {% if not visit.checked_out_at and admin.role in ['admin', 'receptionist'] %}
     <form method="POST" action="/admin/visits/{{ visit.id }}/checkout">
+        {% include "_csrf.html" %}
         <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition">
             Registrar sortida manual
         </button>
@@ -243,6 +244,7 @@ async function viewIdDocument() {
 
     const resp = await fetch('/admin/visits/{{ visit.id }}/view-id', {
         method: 'POST',
+        headers: {'X-CSRF-Token': getCsrfToken()},
         body: formData,
     });
     const data = await resp.json();
@@ -267,7 +269,10 @@ async function viewIdDocument() {
 }
 
 async function deleteVisit() {
-    const resp = await fetch('/admin/visits/{{ visit.id }}/delete', { method: 'POST' });
+    const resp = await fetch('/admin/visits/{{ visit.id }}/delete', {
+        method: 'POST',
+        headers: {'X-CSRF-Token': getCsrfToken()}
+    });
     const data = await resp.json();
     if (data.ok) {
         window.location.href = '/admin/visits';

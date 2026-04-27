@@ -237,11 +237,13 @@ async def login_submit(
     user.last_login = datetime.now(timezone.utc)
     await db.commit()
 
-    # Generar JWT
+    # Generar JWT (iat és necessari per a la invalidació via last_logout_at)
+    now_utc = datetime.now(timezone.utc)
     token = jwt.encode(
         {
             "sub": str(user.id),
-            "exp": datetime.now(timezone.utc) + timedelta(hours=settings.SESSION_HOURS),
+            "iat": int(now_utc.timestamp()),
+            "exp": now_utc + timedelta(hours=settings.SESSION_HOURS),
         },
         settings.JWT_SECRET_KEY,
         algorithm="HS256",
@@ -260,7 +262,13 @@ async def login_submit(
 
 
 @router.get("/logout")
-async def logout():
+async def logout(
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    # Marcar el moment del logout per invalidar tots els JWTs emesos abans
+    admin.last_logout_at = datetime.now(timezone.utc)
+    await db.commit()
     response = RedirectResponse("/admin/login", status_code=302)
     response.delete_cookie("access_token")
     return response
@@ -809,7 +817,10 @@ async def stats_page(
         for row in top_companies_result
     ]
 
-    # Dades crues per filtratge interactiu (dia, dept, hora, empresa per cada visita)
+    # Dades crues per filtratge interactiu (dia, dept, hora, empresa per cada visita).
+    # Limitem a 5000 perquè el JSON s'injecta al HTML i es processa al navegador;
+    # períodes amb més registres es trunquen i s'avisa l'usuari.
+    RAW_VISITS_LIMIT = 5000
     raw_result = await db.execute(
         select(
             func.date_trunc("day", Visit.checked_in_at).label("day"),
@@ -821,7 +832,10 @@ async def stats_page(
         ).outerjoin(Department, Visit.department_id == Department.id)
         .where(period_filter)
         .order_by(Visit.checked_in_at)
+        .limit(RAW_VISITS_LIMIT + 1)
     )
+    raw_rows = list(raw_result)
+    raw_visits_truncated = len(raw_rows) > RAW_VISITS_LIMIT
     raw_visits = [
         {
             "day": row.day.strftime("%Y-%m-%d"),
@@ -830,7 +844,7 @@ async def stats_page(
             "company": row.company,
             "name": f"{row.first_name} {row.last_name}",
         }
-        for row in raw_result
+        for row in raw_rows[:RAW_VISITS_LIMIT]
     ]
 
     ctx = _admin_context(admin)
@@ -847,6 +861,8 @@ async def stats_page(
         "hourly_data": json.dumps(hourly_data),
         "top_companies": top_companies,
         "raw_visits": raw_visits,
+        "raw_visits_truncated": raw_visits_truncated,
+        "raw_visits_limit": RAW_VISITS_LIMIT,
     })
     return templates.TemplateResponse(request, "admin/stats.html", context=ctx)
 
@@ -1075,5 +1091,7 @@ async def reset_password(
     user = result.scalar_one_or_none()
     if user:
         user.password_hash = hash_password(password)
+        # Forçar logout de totes les sessions actives de l'usuari
+        user.last_logout_at = datetime.now(timezone.utc)
         await db.commit()
     return RedirectResponse("/admin/users", status_code=302)

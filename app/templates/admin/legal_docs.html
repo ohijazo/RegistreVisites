@@ -9,6 +9,7 @@
 <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <h2 class="text-sm font-semibold text-gray-700 mb-3">Nova versió</h2>
     <form method="POST" action="/admin/legal">
+        {% include "_csrf.html" %}
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Contingut (CA)</label>
@@ -64,6 +65,7 @@
                 <td class="px-5 py-3">
                     {% if not doc.active %}
                     <form method="POST" action="/admin/legal/{{ doc.id }}/activate" class="inline">
+                        {% include "_csrf.html" %}
                         <button type="submit" class="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">
                             Activar
                         </button>

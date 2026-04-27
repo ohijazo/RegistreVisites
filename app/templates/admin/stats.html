@@ -29,6 +29,12 @@
     </form>
 </div>
 
+{% if raw_visits_truncated %}
+<div class="bg-yellow-50 border border-yellow-300 rounded-lg px-4 py-3 mb-4 text-sm text-yellow-800" role="alert">
+    Període massa ampli: només es mostren les primeres {{ raw_visits_limit }} visites per als gràfics interactius. Resumit (totals, mitjanes, durades) cobreix el període sencer.
+</div>
+{% endif %}
+
 <!-- Filtre actiu (interactiu) -->
 <div id="active-filter" class="hidden bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
     <span class="text-sm text-blue-700">
@@ -248,6 +254,18 @@
     // Inicialitzar gràfics
     var initAgg = aggregate(rawVisits);
 
+    // Helpers per resoldre etiquetes contra el dataset filtrat actual.
+    // Capturar initAgg al closure provocava que el drill-down apuntés
+    // al dia/dept/hora original després de filtrar.
+    function currentDayLabel(i) {
+        var agg = aggregate(getFiltered());
+        return agg.daily[i] ? agg.daily[i].day : null;
+    }
+    function currentHourLabel(i) {
+        var agg = aggregate(getFiltered());
+        return agg.hourly[i] ? agg.hourly[i].hour : null;
+    }
+
     // Gràfic diari
     chartDaily = new Chart(document.getElementById('chart-daily'), {
         type: 'bar',
@@ -264,7 +282,7 @@
             responsive: true,
             plugins: { legend: { display: false }, tooltip: { callbacks: { title: function(items) { return items[0].label; } } } },
             scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-            onClick: function(evt) { chartClick(chartDaily, 'day', function(i) { return initAgg.daily[i] ? initAgg.daily[i].day : null; })(evt); }
+            onClick: function(evt) { chartClick(chartDaily, 'day', currentDayLabel)(evt); }
         }
     });
 
@@ -302,7 +320,7 @@
             responsive: true,
             plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-            onClick: function(evt) { chartClick(chartHourly, 'hour', function(i) { return hours[i]; })(evt); }
+            onClick: function(evt) { chartClick(chartHourly, 'hour', currentHourLabel)(evt); }
         }
     });
 </script>

@@ -18,6 +18,7 @@
     {% endif %}
 
     <form method="POST" action="/{{ lang }}/group" novalidate autocomplete="off" onsubmit="return validateGroup()">
+        {% include "_csrf.html" %}
         <!-- Dades comunes del grup -->
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
             <p class="text-sm font-semibold text-blue-700 mb-3">{{ t('group_common_data') }}</p>

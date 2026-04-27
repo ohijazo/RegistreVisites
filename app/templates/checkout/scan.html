@@ -19,6 +19,7 @@
 
         <!-- Formulari DNI -->
         <form method="POST" action="/checkout/dni">
+            {% include "_csrf.html" %}
             <div class="mb-6">
                 <div class="relative">
                     <input type="text" name="id_document" autocomplete="off" autofocus

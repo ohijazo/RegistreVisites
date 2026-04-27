@@ -57,6 +57,7 @@
                 Cancel·lar
             </button>
             <form method="POST" action="/admin/bulk-checkout" class="flex-1">
+                {% include "_csrf.html" %}
                 <button type="submit"
                         class="w-full bg-orange-600 hover:bg-orange-700 text-white py-2.5 rounded-lg text-sm font-medium">
                     Confirmar sortida
@@ -103,7 +104,10 @@
     async function confirmManualCheckout() {
         if (!pendingCheckoutId) return;
         document.getElementById('checkout-modal').classList.add('hidden');
-        var resp = await fetch('/admin/visits/' + pendingCheckoutId + '/checkout', {method: 'POST'});
+        var resp = await fetch('/admin/visits/' + pendingCheckoutId + '/checkout', {
+            method: 'POST',
+            headers: {'X-CSRF-Token': getCsrfToken()}
+        });
         if (resp.ok) {
             var row = document.getElementById('row-' + pendingCheckoutId);
             if (row) row.innerHTML = '<td colspan="8" class="text-center text-gray-600 py-2">Sortida registrada</td>';

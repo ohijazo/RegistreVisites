@@ -106,6 +106,7 @@ class AdminUser(Base):
     role = Column(String(20), default="receptionist")  # 'admin' | 'receptionist' | 'viewer'
     active = Column(Boolean, default=True)
     last_login = Column(DateTime(timezone=True))
+    last_logout_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
 

@@ -14,6 +14,10 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.db.database import get_db
 from app.routers import visitor, checkout, admin
+from app.services.csrf import (
+    CSRF_COOKIE, CSRF_FIELD, CSRF_HEADER, PROTECTED_METHODS,
+    is_exempt, issue_token, validate_token,
+)
 from app.services.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -52,6 +56,53 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+class CSRFMiddleware(BaseHTTPMiddleware):
+    """Patró double-submit: cookie + camp/header signats que han de coincidir.
+
+    Validació activa per a POST/PUT/PATCH/DELETE excepte rutes a la llista
+    d'exempció. La cookie es refresca per a clients que encara no en tenen.
+    """
+
+    async def dispatch(self, request, call_next):
+        cookie = request.cookies.get(CSRF_COOKIE)
+        path = request.url.path
+
+        if request.method in PROTECTED_METHODS and not is_exempt(path):
+            submitted = request.headers.get(CSRF_HEADER)
+            if not submitted:
+                ct = request.headers.get("content-type", "") or ""
+                if ct.startswith("application/x-www-form-urlencoded") or ct.startswith("multipart/form-data"):
+                    form = await request.form()
+                    submitted = form.get(CSRF_FIELD, "")
+                    # Re-injectar el form perquè el handler l'aprofiti sense rellegir
+                    request._form = form
+            if not validate_token(submitted, cookie):
+                return JSONResponse({"detail": "CSRF token invàlid o absent"}, status_code=403)
+
+        # Assegurar que sempre hi hagi un token al state per als templates
+        if not cookie:
+            cookie = issue_token()
+        request.state.csrf_token = cookie
+
+        response = await call_next(request)
+
+        # Crear la cookie si encara no existia (primera visita o expirada)
+        if not request.cookies.get(CSRF_COOKIE):
+            response.set_cookie(
+                key=CSRF_COOKIE,
+                value=cookie,
+                httponly=False,  # llegible des de JS per HTMX/fetch
+                samesite="strict",
+                secure=settings.ENV == "production",
+                max_age=8 * 3600,
+                path="/",
+            )
+        return response
+
+
+app.add_middleware(CSRFMiddleware)
 
 app.add_middleware(
     SessionMiddleware,

@@ -12,6 +12,7 @@
     </div>
 
     <form method="POST" action="/{{ lang }}/register" novalidate autocomplete="off" onsubmit="return validateForm()">
+        {% include "_csrf.html" %}
         <!-- Nom -->
         <div class="mb-5">
             <label class="block text-gray-700 font-semibold text-base mb-2">

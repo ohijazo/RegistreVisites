@@ -11,7 +11,7 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-100 min-h-screen" hx-headers='{"X-CSRF-Token": "{{ request.state.csrf_token }}"}'>
     <!-- Navbar -->
     <nav class="bg-white shadow-sm border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
@@ -93,6 +93,12 @@
             const sidebar = document.getElementById('sidebar');
             sidebar.classList.toggle('hidden');
         });
+
+        // Helper global: llegir token CSRF de la cookie per a fetch() autenticat
+        function getCsrfToken() {
+            var match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+            return match ? decodeURIComponent(match[1]) : '';
+        }
     </script>
     {% block extra_scripts %}{% endblock %}
 </body>
