@@ -105,6 +105,7 @@ class AdminUser(Base):
     password_hash = Column(String(200), nullable=False)
     role = Column(String(20), default="receptionist")  # 'admin' | 'receptionist' | 'viewer'
     active = Column(Boolean, default=True)
+    host_alias = Column(String(200))  # nom amb què aquest admin apareix com a amfitrió
     last_login = Column(DateTime(timezone=True))
     last_logout_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow)

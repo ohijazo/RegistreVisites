@@ -283,6 +283,7 @@ async def dashboard(
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
+    expected_mine: str = "",
 ):
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -327,18 +328,28 @@ async def dashboard(
     alert_cutoff = now - timedelta(hours=settings.MAX_VISIT_HOURS_ALERT)
     long_stay_count = sum(1 for v in active_visits if v.checked_in_at <= alert_cutoff)
 
-    # Visites previstes per avui (només pendents)
+    # Visites previstes per avui: incloem pendents + arribades (arribades
+    # surten tatxades com a checklist de progrés). El filtre "Les meves"
+    # només s'activa si l'admin té host_alias al perfil.
     today_date = now.date()
-    expected_today_result = await db.execute(
+    expected_mine_active = bool(expected_mine) and bool(admin.host_alias)
+    expected_q = (
         select(ExpectedVisit)
         .options(selectinload(ExpectedVisit.department))
         .where(
             ExpectedVisit.expected_date == today_date,
-            ExpectedVisit.status == "pending",
+            ExpectedVisit.status.in_(["pending", "arrived"]),
         )
         .order_by(ExpectedVisit.expected_time.asc().nullslast())
     )
+    if expected_mine_active:
+        expected_q = expected_q.where(
+            ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%")
+        )
+    expected_today_result = await db.execute(expected_q)
     expected_today = expected_today_result.scalars().all()
+    expected_pending_count = sum(1 for e in expected_today if e.status == "pending")
+    expected_arrived_count = sum(1 for e in expected_today if e.status == "arrived")
 
     ctx = _admin_context(admin)
     ctx.update({
@@ -352,6 +363,9 @@ async def dashboard(
         "long_stay_count": long_stay_count,
         "expected_today": expected_today,
         "expected_today_count": len(expected_today),
+        "expected_pending_count": expected_pending_count,
+        "expected_arrived_count": expected_arrived_count,
+        "expected_mine_active": expected_mine_active,
     })
     return templates.TemplateResponse(request, "admin/dashboard.html", context=ctx)
 
@@ -1121,6 +1135,31 @@ async def reset_password(
     return RedirectResponse("/admin/users", status_code=302)
 
 
+# ── Perfil de l'usuari logat ──────────────────────────────
+
+@router.get("/profile", response_class=HTMLResponse)
+async def profile_page(
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin),
+    saved: str = "",
+):
+    ctx = _admin_context(admin)
+    ctx["saved"] = saved
+    return templates.TemplateResponse(request, "admin/profile.html", ctx)
+
+
+@router.post("/profile")
+async def profile_save(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+    host_alias: str = Form(""),
+):
+    admin.host_alias = (host_alias or "").strip() or None
+    await db.commit()
+    return RedirectResponse("/admin/profile?saved=1", status_code=302)
+
+
 # ── Visites previstes ────────────────────────────────────
 
 EXPECTED_STATUSES = ("pending", "arrived", "cancelled", "no_show")
@@ -1153,13 +1192,15 @@ async def expected_list(
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
-    range: str = Query("upcoming", pattern="^(today|week|upcoming|past|all)$"),
+    range: str = Query("today", pattern="^(today|week|upcoming|past|all)$"),
     status_filter: str = Query("", alias="status"),
+    mine: str = Query(""),
 ):
     today = datetime.now(timezone.utc).date()
     stmt = select(ExpectedVisit).options(
         selectinload(ExpectedVisit.department),
         selectinload(ExpectedVisit.created_by),
+        selectinload(ExpectedVisit.visit),
     )
 
     if range == "today":
@@ -1177,6 +1218,11 @@ async def expected_list(
 
     if status_filter in EXPECTED_STATUSES:
         stmt = stmt.where(ExpectedVisit.status == status_filter)
+
+    # Filtre "Les meves": match difús amb host_alias del perfil
+    mine_active = bool(mine) and bool(admin.host_alias)
+    if mine_active:
+        stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%"))
 
     # Futures: ordre cronològic ascendent. Passades: descendent (més recents primer).
     if range == "past":
@@ -1198,6 +1244,10 @@ async def expected_list(
         "items": items,
         "range": range,
         "status_filter": status_filter,
+        "mine_active": mine_active,
+        "any_filter_applied": (
+            range != "today" or bool(status_filter) or mine_active
+        ),
     })
     return templates.TemplateResponse(request, "admin/expected_list.html", ctx)
 
@@ -1215,6 +1265,7 @@ async def expected_new_page(
     ctx["departments"] = dept_result.scalars().all()
     ctx["error"] = None
     ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
+    ctx["form"] = {}
     return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
 
 
@@ -1241,8 +1292,21 @@ async def expected_create(
         )
         ctx = _admin_context(admin)
         ctx["departments"] = dept_result.scalars().all()
-        ctx["error"] = "Els camps Nom del visitant, Amfitrió i Data són obligatoris."
+        ctx["error"] = "Els camps Nom, Amfitrió i Data són obligatoris."
         ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
+        # Preservar el que l'usuari ja havia escrit per no haver-ho de teclejar de nou
+        ctx["form"] = {
+            "visitor_first_name": visitor_first_name,
+            "visitor_last_name": visitor_last_name,
+            "visitor_company": visitor_company,
+            "visitor_phone": visitor_phone,
+            "host_name": host_name,
+            "department_id": department_id,
+            "expected_date": expected_date,
+            "expected_time": expected_time,
+            "visit_reason": visit_reason,
+            "notes": notes,
+        }
         return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
 
     item = ExpectedVisit(
@@ -1380,6 +1444,15 @@ async def expected_update(
     item.notes = (notes or "").strip() or None
     if status_in in EXPECTED_STATUSES:
         item.status = status_in
+
+    # Si l'admin canvia l'estat a 'arrived' i encara no hi ha vincle,
+    # intentem trobar una visita real del dia que coincideixi (mateix
+    # criteri que el botó "Marcar arribada").
+    if item.status == "arrived" and item.visit_id is None:
+        matched = await find_matching_visit_for_expected(item, db)
+        if matched:
+            item.visit_id = matched.id
+
     await db.commit()
     return RedirectResponse(f"/admin/expected/{item.id}", status_code=302)
 

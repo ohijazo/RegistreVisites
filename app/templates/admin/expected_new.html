@@ -22,37 +22,44 @@
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Nom <span class="text-red-500">*</span></label>
                 <input type="text" name="visitor_first_name" required maxlength="100"
+                       value="{{ form.get('visitor_first_name', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Cognoms</label>
                 <input type="text" name="visitor_last_name" maxlength="150"
+                       value="{{ form.get('visitor_last_name', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Empresa</label>
                 <input type="text" name="visitor_company" maxlength="200"
+                       value="{{ form.get('visitor_company', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Telèfon</label>
                 <input type="tel" name="visitor_phone" maxlength="30"
+                       value="{{ form.get('visitor_phone', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div class="sm:col-span-2">
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Amfitrió <span class="text-red-500">*</span></label>
                 <input type="text" name="host_name" required maxlength="200" placeholder="Qui l'espera"
+                       value="{{ form.get('host_name', admin.host_alias or '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Data <span class="text-red-500">*</span></label>
                 <input type="date" name="expected_date" required
-                       value="{{ today_iso }}"
+                       min="{{ today_iso }}"
+                       value="{{ form.get('expected_date', today_iso) }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Hora aproximada</label>
                 <input type="time" name="expected_time"
+                       value="{{ form.get('expected_time', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div class="sm:col-span-2">
@@ -60,19 +67,20 @@
                 <select name="department_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
                     <option value="">—</option>
                     {% for dept in departments %}
-                    <option value="{{ dept.id }}">{{ dept.name_ca }}</option>
+                    <option value="{{ dept.id }}" {% if form.get('department_id') == dept.id|string %}selected{% endif %}>{{ dept.name_ca }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="sm:col-span-2">
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Motiu de la visita</label>
                 <input type="text" name="visit_reason" maxlength="500"
+                       value="{{ form.get('visit_reason', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div class="sm:col-span-2">
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Notes internes</label>
                 <textarea name="notes" rows="2"
-                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ form.get('notes', '') }}</textarea>
             </div>
         </div>
 

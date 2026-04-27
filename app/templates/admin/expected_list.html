@@ -36,6 +36,14 @@
                 <option value="no_show" {% if status_filter == 'no_show' %}selected{% endif %}>No presentada</option>
             </select>
         </div>
+        {% if admin.host_alias %}
+        <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border {% if mine_active %}border-blue-400 bg-blue-50 text-blue-700 font-medium{% else %}border-gray-300 bg-white{% endif %}">
+            <input type="checkbox" name="mine" value="1" {% if mine_active %}checked{% endif %}
+                   onchange="this.form.submit()"
+                   class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+            Només les meves
+        </label>
+        {% endif %}
         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
             Aplicar
         </button>
@@ -43,6 +51,12 @@
             Netejar
         </a>
     </form>
+    {% if not admin.host_alias %}
+    <p class="text-xs text-gray-600 mt-3">
+        Vols veure ràpidament les visites previstes que t'esperen a tu? Configura el teu nom com a amfitrió a
+        <a href="/admin/profile" class="text-blue-600 hover:underline">El meu perfil</a>.
+    </p>
+    {% endif %}
 </div>
 
 <!-- Llista -->
@@ -66,7 +80,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
                 {% for item in items %}
-                <tr class="hover:bg-gray-50">
+                <tr class="hover:bg-gray-50 {% if item.status in ('arrived', 'cancelled', 'no_show') %}opacity-70 bg-gray-50{% endif %}">
                     <td class="px-5 py-3 text-gray-800 whitespace-nowrap">{{ item.expected_date.strftime('%d/%m/%Y') }}</td>
                     <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
                         {{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}
@@ -95,20 +109,42 @@
                         {% if admin.role in ['admin', 'receptionist'] and item.status == 'pending' %}
                         <form method="POST" action="/admin/expected/{{ item.id }}/mark-arrived" class="inline">
                             {% include "_csrf.html" %}
-                            <button type="submit" class="text-xs bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">Marcar arribada</button>
+                            <button type="submit" class="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded">Marcar arribada</button>
                         </form>
-                        <form method="POST" action="/admin/expected/{{ item.id }}/cancel" class="inline ml-1">
+                        <form method="POST" action="/admin/expected/{{ item.id }}/cancel" class="inline ml-1"
+                              onsubmit="return confirm('Cancel·lar la visita prevista de {{ item.visitor_first_name }} {{ item.visitor_last_name or '' }}?');">
                             {% include "_csrf.html" %}
-                            <button type="submit" class="text-xs bg-gray-300 hover:bg-gray-400 text-gray-700 px-2 py-1 rounded">Cancel·lar</button>
+                            <button type="submit" class="text-xs bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-1.5 rounded">Cancel·lar</button>
                         </form>
+                        {% elif item.status == 'arrived' and item.visit_id %}
+                        <a href="/admin/visits/{{ item.visit_id }}"
+                           class="text-xs text-green-700 hover:text-green-900 hover:underline">Veure registre →</a>
                         {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
                 {% if not items %}
                 <tr>
-                    <td colspan="8" class="px-5 py-8 text-center text-gray-600">
-                        No hi ha visites previstes per aquests filtres.
+                    <td colspan="8" class="px-12 py-12 text-center">
+                        <p class="text-gray-600 text-base mb-4">
+                            {% if any_filter_applied %}
+                            Cap visita prevista coincideix amb aquests filtres.
+                            {% else %}
+                            Encara no hi ha visites previstes per a avui.
+                            {% endif %}
+                        </p>
+                        <div class="flex items-center justify-center gap-3">
+                            {% if any_filter_applied %}
+                            <a href="/admin/expected" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                                Netejar filtres
+                            </a>
+                            {% endif %}
+                            {% if admin.role in ['admin', 'receptionist'] %}
+                            <a href="/admin/expected/new" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                                + Nova visita prevista
+                            </a>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endif %}

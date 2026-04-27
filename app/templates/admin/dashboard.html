@@ -13,29 +13,59 @@
 
 {% if expected_today_count %}
 <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-    <div class="flex items-center justify-between mb-2">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div class="flex items-center gap-3">
-            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-6 h-6 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
-            <span class="text-sm font-semibold text-blue-900">
-                Avui s'esperen {{ expected_today_count }} {{ 'visita' if expected_today_count == 1 else 'visites' }} {{ 'prevista' if expected_today_count == 1 else 'previstes' }}
-            </span>
+            <div>
+                <div class="text-sm font-semibold text-blue-900">
+                    {% if expected_mine_active %}Les meves visites previstes avui{% else %}Visites previstes avui{% endif %}
+                    · {{ expected_pending_count }} {{ 'pendent' if expected_pending_count == 1 else 'pendents' }}
+                    {% if expected_arrived_count %}
+                    <span class="text-blue-700 font-normal">· {{ expected_arrived_count }} {{ 'arribada' if expected_arrived_count == 1 else 'arribades' }}</span>
+                    {% endif %}
+                </div>
+                {% if expected_mine_active %}
+                <div class="text-xs text-blue-700 mt-0.5">Filtrant per "{{ admin.host_alias }}"</div>
+                {% endif %}
+            </div>
         </div>
-        <a href="/admin/expected?range=today"
-           class="text-xs text-blue-700 hover:text-blue-900 font-medium">Veure totes →</a>
+        <div class="flex items-center gap-2">
+            {% if admin.host_alias %}
+                {% if expected_mine_active %}
+                <a href="/admin/" class="text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-100 font-medium">Veure totes</a>
+                {% else %}
+                <a href="/admin/?expected_mine=1" class="text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-100 font-medium">Només meves</a>
+                {% endif %}
+            {% endif %}
+            <a href="/admin/expected?range=today{% if expected_mine_active %}&mine=1{% endif %}"
+               class="text-xs text-blue-700 hover:text-blue-900 font-medium">Veure llista →</a>
+        </div>
     </div>
     <ul class="text-sm text-gray-700 space-y-1">
         {% for item in expected_today[:5] %}
-        <li class="flex items-center gap-2">
-            <span class="text-xs font-mono text-gray-600 w-12">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</span>
-            <a href="/admin/expected/{{ item.id }}" class="text-blue-700 hover:underline">{{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}</a>
-            {% if item.visitor_company %}<span class="text-gray-600">· {{ item.visitor_company }}</span>{% endif %}
+        <li class="flex items-center gap-2 {% if item.status == 'arrived' %}text-gray-500{% endif %}">
+            <span class="w-5 inline-flex justify-center flex-shrink-0">
+                {% if item.status == 'arrived' %}
+                <span class="text-green-600 font-bold" title="Ha arribat">✓</span>
+                {% else %}
+                <span class="text-blue-400">·</span>
+                {% endif %}
+            </span>
+            <span class="text-xs font-mono text-gray-600 w-12 flex-shrink-0">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</span>
+            <a href="/admin/expected/{{ item.id }}" class="hover:underline {% if item.status == 'arrived' %}line-through text-gray-500{% else %}text-blue-700{% endif %}">{{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}</a>
+            {% if item.visitor_company %}<span class="text-gray-600 {% if item.status == 'arrived' %}line-through{% endif %}">· {{ item.visitor_company }}</span>{% endif %}
             <span class="text-gray-600">→ {{ item.host_name }}</span>
+            {% if item.visitor_phone and item.status != 'arrived' %}
+            <a href="tel:{{ item.visitor_phone }}" class="ml-auto text-blue-600 hover:text-blue-800 text-base" title="Trucar a {{ item.visitor_phone }}">📞</a>
+            {% endif %}
         </li>
         {% endfor %}
         {% if expected_today_count > 5 %}
-        <li class="text-xs text-gray-600 italic">... i {{ expected_today_count - 5 }} {{ 'més' if expected_today_count - 5 == 1 else 'més' }}</li>
+        <li class="text-xs text-gray-600 italic ml-7">
+            <a href="/admin/expected?range=today{% if expected_mine_active %}&mine=1{% endif %}" class="hover:underline">… i {{ expected_today_count - 5 }} més</a>
+        </li>
         {% endif %}
     </ul>
 </div>
