@@ -20,6 +20,7 @@ from app.db.database import get_db
 from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt
+from app.services.email import send_email, smtp_configured
 from app.services.export import visits_to_excel, visits_to_csv
 
 MIN_ADMIN_PASSWORD_LEN = 12
@@ -1252,12 +1253,46 @@ async def expected_create(
     return RedirectResponse("/admin/expected", status_code=302)
 
 
+def _build_email_defaults(item: ExpectedVisit) -> tuple[str, str]:
+    """Assumpte i cos prefilats per a la notificació d'una visita prevista."""
+    subject = f"Visita prevista: {item.visitor_name} el {item.expected_date.strftime('%d/%m/%Y')}"
+
+    lines = [
+        "Hola,",
+        "",
+        "Us notifico la visita prevista següent:",
+        "",
+        f"Visitant: {item.visitor_name}",
+    ]
+    if item.visitor_company:
+        lines.append(f"Empresa: {item.visitor_company}")
+    if item.visitor_phone:
+        lines.append(f"Telèfon: {item.visitor_phone}")
+    lines.append(f"Amfitrió: {item.host_name}")
+    if item.department:
+        lines.append(f"Departament: {item.department.name_ca}")
+    lines.append(f"Data: {item.expected_date.strftime('%d/%m/%Y')}")
+    if item.expected_time:
+        lines.append(f"Hora aproximada: {item.expected_time.strftime('%H:%M')}")
+    if item.visit_reason:
+        lines.append(f"Motiu: {item.visit_reason}")
+    if item.notes:
+        lines.append("")
+        lines.append(f"Notes: {item.notes}")
+    lines.append("")
+    lines.append("Salutacions,")
+    lines.append(settings.COMPANY_NAME)
+    return subject, "\n".join(lines)
+
+
 @router.get("/expected/{item_id}", response_class=HTMLResponse)
 async def expected_detail(
     item_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
+    email_sent: str = "",
+    email_error: str = "",
 ):
     result = await db.execute(
         select(ExpectedVisit)
@@ -1274,10 +1309,17 @@ async def expected_detail(
     dept_result = await db.execute(
         select(Department).where(Department.active.is_(True)).order_by(Department.order)
     )
+    default_subject, default_body = _build_email_defaults(item)
+
     ctx = _admin_context(admin)
     ctx["item"] = item
     ctx["departments"] = dept_result.scalars().all()
     ctx["statuses"] = EXPECTED_STATUSES
+    ctx["smtp_ready"] = smtp_configured()
+    ctx["default_email_subject"] = default_subject
+    ctx["default_email_body"] = default_body
+    ctx["email_sent"] = email_sent
+    ctx["email_error"] = email_error
     return templates.TemplateResponse(request, "admin/expected_detail.html", ctx)
 
 
@@ -1356,3 +1398,74 @@ async def expected_delete(
     await db.execute(delete(ExpectedVisit).where(ExpectedVisit.id == item_id))
     await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
+
+
+@router.post("/expected/{item_id}/notify-email")
+async def expected_notify_email(
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+    recipients: str = Form(...),
+    subject: str = Form(...),
+    body: str = Form(...),
+):
+    result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        return RedirectResponse("/admin/expected", status_code=302)
+
+    if not smtp_configured():
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?email_error=SMTP+no+configurat",
+            status_code=302,
+        )
+
+    rcpts = [e.strip() for e in recipients.split(",") if e.strip()]
+    rcpts = [e for e in rcpts if "@" in e and len(e) <= 320]
+    if not rcpts:
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?email_error=Cal+almenys+un+destinatari+v%C3%A0lid",
+            status_code=302,
+        )
+
+    ok, msg = await send_email(rcpts, subject.strip()[:300], body)
+
+    if ok:
+        item.last_email_sent_at = datetime.now(timezone.utc)
+        item.last_email_recipients = ", ".join(rcpts)
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="expected_visit_email_sent",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({
+                "expected_id": str(item.id),
+                "recipients": rcpts,
+                "subject": subject.strip()[:300],
+            }),
+        ))
+        await db.commit()
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?email_sent=ok",
+            status_code=302,
+        )
+
+    # Error: registrem intent al log però no marquem last_email_sent_at
+    db.add(AuditLog(
+        admin_id=admin.id,
+        visit_id=None,
+        action="expected_visit_email_failed",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({
+            "expected_id": str(item.id),
+            "recipients": rcpts,
+            "error": msg[:400],
+        }),
+    ))
+    await db.commit()
+    from urllib.parse import quote
+    return RedirectResponse(
+        f"/admin/expected/{item.id}?email_error={quote(msg[:200])}",
+        status_code=302,
+    )

@@ -139,6 +139,10 @@ class ExpectedVisit(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    # Notificació per email (enviament manual)
+    last_email_sent_at = Column(DateTime(timezone=True), nullable=True)
+    last_email_recipients = Column(Text, nullable=True)
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
