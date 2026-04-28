@@ -58,6 +58,18 @@
     </div>
     {% endif %}
 
+    {% if invitation_sent == 'ok' %}
+    <div class="bg-green-50 border border-green-300 text-green-800 px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+        <span class="text-sm font-medium">Invitació enviada al visitant correctament.</span>
+        <a href="/admin/expected/{{ item.id }}" class="text-green-700 hover:text-green-900 text-lg font-bold">&times;</a>
+    </div>
+    {% elif invitation_error %}
+    <div class="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+        <span class="text-sm font-medium">No s'ha pogut enviar la invitació: {{ invitation_error }}</span>
+        <a href="/admin/expected/{{ item.id }}" class="text-red-700 hover:text-red-900 text-lg font-bold">&times;</a>
+    </div>
+    {% endif %}
+
     {% if item.last_email_sent_at %}
     <div class="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-lg mb-4 text-sm">
         Última notificació enviada el {{ item.last_email_sent_at.strftime('%d/%m/%Y %H:%M') }}
@@ -79,7 +91,7 @@
                     Al quiosc podrà saltar-se el formulari i només omplir el DNI i la signatura.
                     Si l'envies amb el QR, el podrà escanejar amb el mòbil i fer pre-registre.
                 </p>
-                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                <div class="flex items-center gap-2 mb-3 flex-wrap">
                     <span id="access-code-value" class="font-mono text-xl font-bold tracking-widest text-purple-900 bg-white border border-purple-300 rounded px-4 py-2 select-all">{{ item.access_code }}</span>
                     <button type="button" onclick="copyAccessCode()"
                             class="text-sm bg-white hover:bg-purple-100 border border-purple-300 text-purple-700 px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
@@ -96,6 +108,34 @@
                         Descarregar QR
                     </a>
                 </div>
+
+                {# Botó d'enviament al visitant #}
+                {% if is_editor %}
+                {% if item.visitor_email %}
+                <form method="POST" action="/admin/expected/{{ item.id }}/send-visitor-invitation"
+                      class="mb-2"
+                      onsubmit="return confirm('Enviar invitació amb el codi i el QR a {{ item.visitor_email }}?');">
+                    {% include "_csrf.html" %}
+                    <button type="submit" {% if not smtp_ready %}disabled title="Cal configurar el backend d'email al .env"{% endif %}
+                            class="text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                        {% if item.visitor_invitation_sent_at %}Reenviar invitació al visitant{% else %}Enviar invitació al visitant{% endif %}
+                    </button>
+                </form>
+                {% if item.visitor_invitation_sent_at %}
+                <p class="text-xs text-purple-700 mb-2">
+                    Última invitació enviada al visitant el {{ item.visitor_invitation_sent_at.strftime('%d/%m/%Y a les %H:%M') }} a <span class="font-medium">{{ item.visitor_email }}</span>.
+                </p>
+                {% endif %}
+                {% else %}
+                <p class="text-xs text-purple-700 mb-2 italic">
+                    💡 Per enviar el codi i el QR al visitant, afegeix-li un email al detall (clica "Editar").
+                </p>
+                {% endif %}
+                {% endif %}
+
                 <p class="text-xs text-purple-700 font-mono break-all">
                     URL: {{ settings.BASE_URL }}/ca/code/{{ item.access_code }}
                 </p>
@@ -150,6 +190,14 @@
                 <dd class="text-gray-800 mt-1">
                     {% if item.visitor_phone %}
                     <a href="tel:{{ item.visitor_phone }}" class="text-blue-700 hover:underline">{{ item.visitor_phone }}</a>
+                    {% else %}—{% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-xs text-gray-600 uppercase tracking-wider">Email</dt>
+                <dd class="text-gray-800 mt-1">
+                    {% if item.visitor_email %}
+                    <a href="mailto:{{ item.visitor_email }}" class="text-blue-700 hover:underline">{{ item.visitor_email }}</a>
                     {% else %}—{% endif %}
                 </dd>
             </div>
@@ -240,6 +288,13 @@
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Telèfon</label>
                 <input type="tel" name="visitor_phone" maxlength="30"
                        value="{{ item.visitor_phone or '' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Email del visitant</label>
+                <input type="email" name="visitor_email" maxlength="320"
+                       value="{{ item.visitor_email or '' }}"
+                       placeholder="opcional"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div class="sm:col-span-2">

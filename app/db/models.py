@@ -123,6 +123,8 @@ class ExpectedVisit(Base):
     visitor_last_name = Column(String(150))
     visitor_company = Column(String(200))
     visitor_phone = Column(String(30))
+    visitor_email = Column(String(320))
+    visitor_invitation_sent_at = Column(DateTime(timezone=True), nullable=True)
 
     host_name = Column(String(200), nullable=False)
     department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)

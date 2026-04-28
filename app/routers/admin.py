@@ -1835,6 +1835,7 @@ async def expected_create(
     visitor_last_name: str = Form(""),
     visitor_company: str = Form(""),
     visitor_phone: str = Form(""),
+    visitor_email: str = Form(""),
     host_name: str = Form(...),
     department_id: str = Form(""),
     expected_date: str = Form(...),
@@ -1859,6 +1860,7 @@ async def expected_create(
             "visitor_last_name": visitor_last_name,
             "visitor_company": visitor_company,
             "visitor_phone": visitor_phone,
+            "visitor_email": visitor_email,
             "host_name": host_name,
             "department_id": department_id,
             "expected_date": expected_date,
@@ -1874,6 +1876,7 @@ async def expected_create(
         visitor_last_name=(visitor_last_name or "").strip() or None,
         visitor_company=(visitor_company or "").strip() or None,
         visitor_phone=(visitor_phone or "").strip() or None,
+        visitor_email=(visitor_email or "").strip() or None,
         host_name=host_name.strip(),
         department_id=department_id or None,
         expected_date=parsed_date,
@@ -1902,6 +1905,69 @@ def _expected_full_name(item: ExpectedVisit) -> str:
     if item.visitor_last_name:
         parts.append(item.visitor_last_name)
     return " ".join(p for p in parts if p).strip()
+
+
+def _generate_qr_data_uri(data: str) -> str:
+    """Genera un QR PNG i el retorna com a data URI base64 per embegir
+    al cos d'un correu HTML."""
+    import base64
+    import io
+    import qrcode
+
+    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
+def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
+    """Renderitza el correu d'invitació al visitant. Retorna (subject, html)."""
+    full_name = _expected_full_name(item)
+    subject = f"La teva visita a {settings.COMPANY_NAME} · {item.expected_date.strftime('%d/%m/%Y')}"
+    base_url = settings.BASE_URL.rstrip("/")
+    preregister_url = f"{base_url}/ca/code/{item.access_code}"
+    qr_data_uri = _generate_qr_data_uri(preregister_url)
+
+    html = templates.get_template("email/visitor_invitation.html").render(
+        subject=subject,
+        company_name=settings.COMPANY_NAME,
+        visitor_first_name=item.visitor_first_name,
+        full_name=full_name,
+        host_name=item.host_name,
+        department_name=item.department.name_ca if item.department else None,
+        expected_date_display=item.expected_date.strftime("%d/%m/%Y"),
+        expected_time_display=item.expected_time.strftime("%H:%M") if item.expected_time else None,
+        visit_reason=item.visit_reason,
+        access_code=item.access_code,
+        preregister_url=preregister_url,
+        qr_data_uri=qr_data_uri,
+    )
+    return subject, html
+
+
+def _build_visitor_invitation_text(item: ExpectedVisit) -> str:
+    """Versió text-pla del correu d'invitació (fallback per a clients sense HTML)."""
+    parts = [
+        f"Hola {item.visitor_first_name},",
+        "",
+        f"T'esperem a {settings.COMPANY_NAME} el {item.expected_date.strftime('%d/%m/%Y')}"
+        + (f" a les {item.expected_time.strftime('%H:%M')}." if item.expected_time else "."),
+    ]
+    if item.host_name:
+        parts.append(f"T'atendrà: {item.host_name}.")
+    parts.append("")
+    parts.append("Per estalviar temps en arribar:")
+    parts.append(f"  · Codi d'accés: {item.access_code}")
+    base_url = settings.BASE_URL.rstrip("/")
+    parts.append(f"  · Pre-registre: {base_url}/ca/code/{item.access_code}")
+    parts.append("")
+    parts.append("Quan arribis a recepció, escaneja el QR amb el mòbil o introdueix el codi al quiosc.")
+    parts.append("")
+    parts.append(f"T'esperem!\n{settings.COMPANY_NAME}")
+    return "\n".join(parts)
 
 
 def _render_expected_email_html(item: ExpectedVisit, subject: str) -> str:
@@ -2369,6 +2435,8 @@ async def expected_detail(
     admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
     email_sent: str = "",
     email_error: str = "",
+    invitation_sent: str = "",
+    invitation_error: str = "",
 ):
     result = await db.execute(
         select(ExpectedVisit)
@@ -2398,6 +2466,8 @@ async def expected_detail(
     ctx["default_email_body"] = default_body
     ctx["email_sent"] = email_sent
     ctx["email_error"] = email_error
+    ctx["invitation_sent"] = invitation_sent
+    ctx["invitation_error"] = invitation_error
     return templates.TemplateResponse(request, "admin/expected_detail.html", ctx)
 
 
@@ -2411,6 +2481,7 @@ async def expected_update(
     visitor_last_name: str = Form(""),
     visitor_company: str = Form(""),
     visitor_phone: str = Form(""),
+    visitor_email: str = Form(""),
     host_name: str = Form(...),
     department_id: str = Form(""),
     expected_date: str = Form(...),
@@ -2430,6 +2501,7 @@ async def expected_update(
     item.visitor_last_name = (visitor_last_name or "").strip() or None
     item.visitor_company = (visitor_company or "").strip() or None
     item.visitor_phone = (visitor_phone or "").strip() or None
+    item.visitor_email = (visitor_email or "").strip() or None
     item.host_name = host_name.strip()
     item.department_id = department_id or None
     item.expected_date = parsed_date
@@ -2504,6 +2576,81 @@ async def expected_delete(
     await db.execute(delete(ExpectedVisit).where(ExpectedVisit.id == item_id))
     await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
+
+
+@router.post("/expected/{item_id}/send-visitor-invitation")
+async def expected_send_visitor_invitation(
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    """Envia al visitant un correu HTML amb les dades de la visita,
+    el codi d'accés i el QR per fer pre-registre. Tot opcional: si no
+    hi ha visitor_email o access_code, redirigim amb error."""
+    result = await db.execute(
+        select(ExpectedVisit).where(ExpectedVisit.id == item_id)
+        .options(selectinload(ExpectedVisit.department))
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        return RedirectResponse("/admin/expected", status_code=302)
+
+    if not item.visitor_email or "@" not in item.visitor_email:
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?invitation_error=El+visitant+no+t%C3%A9+email+configurat",
+            status_code=302,
+        )
+    if not item.access_code:
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?invitation_error=Aquesta+previsi%C3%B3+no+t%C3%A9+codi+d%27acc%C3%A9s",
+            status_code=302,
+        )
+    if not smtp_configured():
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?invitation_error=Backend+d%27email+no+configurat",
+            status_code=302,
+        )
+
+    subject, html = _render_visitor_invitation_html(item)
+    text_body = _build_visitor_invitation_text(item)
+    ok, msg = await send_email([item.visitor_email], subject, text_body, html_body=html)
+
+    if ok:
+        item.visitor_invitation_sent_at = datetime.now(timezone.utc)
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="visitor_invitation_sent",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({
+                "expected_id": str(item.id),
+                "to": item.visitor_email,
+            }),
+        ))
+        await db.commit()
+        return RedirectResponse(
+            f"/admin/expected/{item.id}?invitation_sent=ok",
+            status_code=302,
+        )
+
+    db.add(AuditLog(
+        admin_id=admin.id,
+        visit_id=None,
+        action="visitor_invitation_failed",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({
+            "expected_id": str(item.id),
+            "to": item.visitor_email,
+            "error": msg[:400],
+        }),
+    ))
+    await db.commit()
+    from urllib.parse import quote
+    return RedirectResponse(
+        f"/admin/expected/{item.id}?invitation_error={quote(msg[:200])}",
+        status_code=302,
+    )
 
 
 @router.post("/expected/{item_id}/notify-email")

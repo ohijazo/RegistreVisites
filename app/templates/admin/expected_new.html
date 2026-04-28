@@ -44,6 +44,16 @@
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Email del visitant</label>
+                <input type="email" name="visitor_email" maxlength="320"
+                       value="{{ form.get('visitor_email', '') }}"
+                       placeholder="opcional — per poder-li enviar el codi i el QR"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <p class="text-xs text-gray-600 mt-1">
+                    Si l'omples, podràs enviar-li la invitació amb el codi de pre-registre des del detall.
+                </p>
+            </div>
+            <div class="sm:col-span-2">
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Amfitrió <span class="text-red-500">*</span></label>
                 <input type="text" name="host_name" list="host-suggestions" required maxlength="200" placeholder="Qui l'espera"
                        value="{{ form.get('host_name', admin.host_alias or '') }}"
