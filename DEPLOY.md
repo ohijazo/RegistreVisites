@@ -165,7 +165,89 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 11. Email amb Microsoft 365 (Graph API, OAuth 2.0)
+## 11. Email amb Microsoft 365 — Opció ràpida amb Power Automate
+
+Alternativa a Graph API quan no es pot obtenir admin consent del tenant
+(o per anar més ràpid). El flux corre amb les credencials del compte
+M365 propietari, sense necessitat de cap app a Entra ID ni rol especial.
+
+### a) Crear el flux
+
+1. Anar a **https://make.powerautomate.com** i fer login amb la
+   bústia que ha d'enviar (p.ex. `coromina@agrienergia.com`).
+2. **Crear** → **Flux instantani** → seleccionar el trigger
+   "**Quan es rep una sol·licitud HTTP**" (When an HTTP request is
+   received).
+3. Al primer pas, definir l'esquema JSON del body que rebrà:
+
+   ```json
+   {
+       "type": "object",
+       "properties": {
+           "to": {
+               "type": "array",
+               "items": { "type": "string" }
+           },
+           "subject": { "type": "string" },
+           "body": { "type": "string" }
+       }
+   }
+   ```
+
+4. **+ Nou pas** → buscar **"Office 365 Outlook"** → acció
+   "**Enviar un correu electrònic (V2)**". Omplir:
+   - **A**: `join(triggerBody()?['to'], ';')` (o seleccionar dinàmicament
+     `to` i el connector ja el separa).
+     Tip: si la UI no t'admet l'array, posa-hi una expressió:
+     `join(triggerBody()?['to'], ';')`.
+   - **Assumpte**: contingut dinàmic → `subject`.
+   - **Cos**: contingut dinàmic → `body`.
+5. (Opcional, recomanat) Validar el header secret abans d'enviar:
+   - Inserir un pas **Condició** abans de l'acció Outlook.
+   - Condició: `triggerOutputs()?['headers']?['X-Webhook-Secret']`
+     **és igual a** `<el-teu-secret>`.
+   - Si fals → "Resposta" amb codi 401.
+6. **Desar** el flux.
+
+### b) Apuntar la URL del webhook
+
+Tornar al primer pas (HTTP request). Apareix la **HTTP POST URL**
+(generada automàticament). Còpia-la.
+
+### c) Configuració al `.env`
+
+```bash
+EMAIL_BACKEND=power_automate
+POWER_AUTOMATE_WEBHOOK_URL=https://prod-XX.westeurope.logic.azure.com:443/workflows/.../triggers/manual/paths/invoke?...
+POWER_AUTOMATE_SECRET=<un-string-llarg-aleatori>
+
+# Destinataris per defecte
+EXPECTED_NOTIFY_RECIPIENTS=cap@empresa.com
+```
+
+Per generar un secret bo:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+### d) Verificació
+
+`systemctl restart visites`, crea una visita prevista i comprova
+`/admin/audit-logs?action=expected_visit_email_sent_auto`. Si falla,
+mira `expected_visit_email_failed_auto` per veure l'error retornat
+per Power Automate.
+
+### Notes
+
+- El compte que ha creat el flux és qui apareix com a remitent dels
+  emails. Si aquesta persona deixa l'empresa, el flux deixarà de
+  funcionar — caldrà recrear-lo amb un altre compte.
+- Limits: usuari Power Automate Free: ~100 execucions/dia. Plans M365
+  E3/E5/Business Premium: pràcticament il·limitat per a aquest ús.
+- Per a integració més robusta i auditable a llarg termini, considerar
+  migrar a Graph API (secció següent).
+
+## 12. Email amb Microsoft 365 (Graph API, OAuth 2.0)
 
 Configuració recomanada per a comptes M365 corporatives. Sobreviu a la
 deprecació de SMTP AUTH i no requereix mantenir cap contrasenya
@@ -229,7 +311,7 @@ Si falla:
 - Errors típics: `401` (token), `403` (permís Mail.Send no concedit /
   ApplicationAccessPolicy bloca la bústia), `404` (bústia no existeix).
 
-## 12. Cron de manteniment
+## 13. Cron de manteniment
 
 Tres tasques nocturnes: tancar visites obertes, purgar registres antics
 (RGPD) i — opcionalment — anonimitzar visitants concrets sota petició
@@ -247,7 +329,7 @@ sudo crontab -u www-data -e
 0 3 * * * /opt/visites/venv/bin/python /opt/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
 ```
 
-## 13. Backup diari de la base de dades
+## 14. Backup diari de la base de dades
 
 ```bash
 sudo mkdir -p /opt/backups/visites
@@ -258,7 +340,7 @@ sudo tee /etc/cron.d/visites-backup > /dev/null <<EOF
 EOF
 ```
 
-## 14. Verificar
+## 15. Verificar
 
 ```bash
 # Health check

@@ -1,16 +1,19 @@
-"""Servei d'enviament d'emails amb dos backends pluggables.
+"""Servei d'enviament d'emails amb tres backends pluggables.
 
 Selecció via `settings.EMAIL_BACKEND`:
-  - 'smtp'      → SMTP clàssic (aiosmtplib)
-  - 'graph_ms'  → Microsoft Graph API (msal + httpx)
+  - 'smtp'           → SMTP clàssic (aiosmtplib)
+  - 'graph_ms'       → Microsoft Graph API (msal + httpx)
+  - 'power_automate' → webhook a un flux de Power Automate (httpx)
 
-El backend Graph és el recomanat per a comptes M365: sobreviu a la
-deprecació de SMTP AUTH i no requereix mantenir cap contrasenya
-"d'aplicació". Autentica amb el flux client-credentials d'Azure AD
-(`client_id` + `client_secret` registrats com a app a Entra ID amb
-permís d'aplicació `Mail.Send`).
+Power Automate és la opció més senzilla per a M365 quan l'admin del
+tenant no vol concedir admin consent a una app de Graph: el flux corre
+amb les credencials de l'usuari que el crea, sense necessitat de cap
+permís d'aplicació.
 
-API pública (sense canvis respecte de la versió SMTP-only):
+Graph és el recomanat per a integracions de llarga durada (sobreviu
+millor a canvis del propietari del flux i té auditoria centralitzada).
+
+API pública (sense canvis):
     smtp_configured() -> bool
     send_email(to, subject, body) -> tuple[bool, str]
 """
@@ -31,13 +34,16 @@ _graph_token_cache: dict = {"token": None, "expires_at": 0.0}
 
 def smtp_configured() -> bool:
     """True si el backend actiu té tota la configuració necessària."""
-    if settings.EMAIL_BACKEND == "graph_ms":
+    backend = settings.EMAIL_BACKEND
+    if backend == "graph_ms":
         return bool(
             settings.MS_TENANT_ID
             and settings.MS_CLIENT_ID
             and settings.MS_CLIENT_SECRET
             and settings.MS_SENDER_EMAIL
         )
+    if backend == "power_automate":
+        return bool(settings.POWER_AUTOMATE_WEBHOOK_URL)
     return bool(settings.SMTP_HOST)
 
 
@@ -49,8 +55,11 @@ async def send_email(
     """Punt d'entrada únic. Retorna (ok, missatge)."""
     if not to:
         return False, "Cap destinatari"
-    if settings.EMAIL_BACKEND == "graph_ms":
+    backend = settings.EMAIL_BACKEND
+    if backend == "graph_ms":
         return await _send_via_graph(to, subject, body)
+    if backend == "power_automate":
+        return await _send_via_power_automate(to, subject, body)
     return await _send_via_smtp(to, subject, body)
 
 
@@ -125,6 +134,44 @@ async def _get_graph_token() -> tuple[str | None, str]:
     _graph_token_cache["token"] = token
     _graph_token_cache["expires_at"] = time.time() + ttl
     return token, "fresh"
+
+
+# ─── Backend Power Automate (webhook) ──────────────────────────────
+
+async def _send_via_power_automate(
+    to: list[str], subject: str, body: str
+) -> tuple[bool, str]:
+    import httpx
+
+    if not settings.POWER_AUTOMATE_WEBHOOK_URL:
+        return False, "POWER_AUTOMATE_WEBHOOK_URL no configurat"
+
+    payload = {
+        "to": to,
+        "subject": subject,
+        "body": body,
+    }
+    headers = {"Content-Type": "application/json"}
+    if settings.POWER_AUTOMATE_SECRET:
+        # El flux pot validar aquest header al primer pas. Si no el valida,
+        # el header simplement s'ignora (cap problema).
+        headers["X-Webhook-Secret"] = settings.POWER_AUTOMATE_SECRET
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                settings.POWER_AUTOMATE_WEBHOOK_URL,
+                json=payload,
+                headers=headers,
+            )
+            # Power Automate retorna 200 si accepta la petició. 202 si la
+            # processa de manera diferida. Tots dos els considerem èxit
+            # (l'enviament real pot trigar uns segons al núvol).
+            if resp.status_code in (200, 202):
+                return True, "OK"
+            return False, f"Power Automate {resp.status_code}: {resp.text[:300]}"
+    except Exception as exc:
+        return False, f"Error Power Automate: {exc}"
 
 
 async def _send_via_graph(to: list[str], subject: str, body: str) -> tuple[bool, str]:

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     MS_CLIENT_SECRET: str = ""
     MS_SENDER_EMAIL: str = ""  # bústia que envia, ex: coromina@agrienergia.com
 
+    # Power Automate webhook — només cal si EMAIL_BACKEND=power_automate.
+    # La URL la genera Power Automate quan crees un flux amb trigger
+    # 'When an HTTP request is received'. El secret és opcional però
+    # recomanat: el flux pot validar-lo al header X-Webhook-Secret per
+    # evitar que algú que descobreixi la URL pugui disparar emails.
+    POWER_AUTOMATE_WEBHOOK_URL: str = ""
+    POWER_AUTOMATE_SECRET: str = ""
+
     # Destinataris per defecte de la notificació automàtica al crear
     # una visita prevista (separats per comes). Camp buit = sense
     # notificació automàtica per defecte.
