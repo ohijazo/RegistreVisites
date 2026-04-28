@@ -72,6 +72,7 @@ async def send_email(
     subject: str,
     body: str,
     html_body: str | None = None,
+    qr_png: bytes | None = None,
 ) -> tuple[bool, str]:
     """Punt d'entrada únic. Retorna (ok, missatge).
 
@@ -111,16 +112,17 @@ async def send_email(
 
     backend = settings.EMAIL_BACKEND
     if backend == "graph_ms":
-        return await _send_via_graph(to, subject, body, html_body)
+        return await _send_via_graph(to, subject, body, html_body, qr_png)
     if backend == "power_automate":
-        return await _send_via_power_automate(to, subject, body, html_body)
-    return await _send_via_smtp(to, subject, body, html_body)
+        return await _send_via_power_automate(to, subject, body, html_body, qr_png)
+    return await _send_via_smtp(to, subject, body, html_body, qr_png)
 
 
 # ─── Backend SMTP ───────────────────────────────────────────────────
 
 async def _send_via_smtp(
-    to: list[str], subject: str, body: str, html_body: str | None = None
+    to: list[str], subject: str, body: str,
+    html_body: str | None = None, qr_png: bytes | None = None,
 ) -> tuple[bool, str]:
     if not settings.SMTP_HOST:
         return False, "SMTP no configurat"
@@ -132,6 +134,11 @@ async def _send_via_smtp(
     msg.set_content(body)
     if html_body:
         msg.add_alternative(html_body, subtype="html")
+        # Inline QR per <img src="cid:qr.png">
+        if qr_png:
+            msg.get_payload()[1].add_related(
+                qr_png, maintype="image", subtype="png", cid="<qr.png>"
+            )
 
     use_tls = settings.SMTP_PORT == 465
     start_tls = settings.SMTP_PORT in (587, 25) and not use_tls
@@ -197,8 +204,10 @@ async def _get_graph_token() -> tuple[str | None, str]:
 # ─── Backend Power Automate (webhook) ──────────────────────────────
 
 async def _send_via_power_automate(
-    to: list[str], subject: str, body: str, html_body: str | None = None
+    to: list[str], subject: str, body: str,
+    html_body: str | None = None, qr_png: bytes | None = None,
 ) -> tuple[bool, str]:
+    import base64 as _b64
     import httpx
 
     if not settings.POWER_AUTOMATE_WEBHOOK_URL:
@@ -211,6 +220,10 @@ async def _send_via_power_automate(
         "to": to,
         "subject": subject,
         "body": html_body or body,
+        # Adjunt inline opcional. El flux ha de mapar-lo a un attachment
+        # de Outlook V2 amb name="qr.png"; quan el cos HTML referencia
+        # <img src="cid:qr.png">, Outlook l'enllaça automàticament.
+        "qr_attachment_base64": _b64.b64encode(qr_png).decode() if qr_png else "",
     }
     headers = {"Content-Type": "application/json"}
     if settings.POWER_AUTOMATE_SECRET:
@@ -245,8 +258,10 @@ async def _send_via_power_automate(
 
 
 async def _send_via_graph(
-    to: list[str], subject: str, body: str, html_body: str | None = None
+    to: list[str], subject: str, body: str,
+    html_body: str | None = None, qr_png: bytes | None = None,
 ) -> tuple[bool, str]:
+    import base64 as _b64
     import httpx
 
     if not settings.MS_SENDER_EMAIL:
@@ -261,14 +276,25 @@ async def _send_via_graph(
     else:
         body_part = {"contentType": "Text", "content": body}
 
+    message: dict = {
+        "subject": subject,
+        "body": body_part,
+        "toRecipients": [
+            {"emailAddress": {"address": addr}} for addr in to
+        ],
+    }
+    if qr_png:
+        message["attachments"] = [{
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": "qr.png",
+            "contentType": "image/png",
+            "contentId": "qr.png",
+            "isInline": True,
+            "contentBytes": _b64.b64encode(qr_png).decode(),
+        }]
+
     payload = {
-        "message": {
-            "subject": subject,
-            "body": body_part,
-            "toRecipients": [
-                {"emailAddress": {"address": addr}} for addr in to
-            ],
-        },
+        "message": message,
         "saveToSentItems": "true",
     }
 

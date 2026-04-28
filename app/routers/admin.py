@@ -1907,10 +1907,8 @@ def _expected_full_name(item: ExpectedVisit) -> str:
     return " ".join(p for p in parts if p).strip()
 
 
-def _generate_qr_data_uri(data: str) -> str:
-    """Genera un QR PNG i el retorna com a data URI base64 per embegir
-    al cos d'un correu HTML."""
-    import base64
+def _generate_qr_png_bytes(data: str) -> bytes:
+    """Genera un QR PNG i retorna els bytes binaris (per a adjunts inline)."""
     import io
     import qrcode
 
@@ -1920,22 +1918,23 @@ def _generate_qr_data_uri(data: str) -> str:
     img = qr.make_image(fill_color="black", back_color="white")
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+    return buffer.getvalue()
 
 
-def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
-    """Renderitza el correu d'invitació al visitant. Retorna (subject, html).
+def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str, bytes]:
+    """Renderitza el correu d'invitació al visitant.
+    Retorna (subject, html, qr_png_bytes).
 
-    El QR es serveix com a URL pública (no com a data URI base64) perquè
-    clients d'email com Gmail bloquen les imatges data: per seguretat.
-    Cal que BASE_URL del .env sigui accessible des d'Internet perquè el
-    QR es carregui al correu del visitant.
+    El QR s'envia com a adjunt inline (cid:qr.png) dins del propi
+    correu — així viatja amb el missatge i no requereix que el client
+    d'email pugui arribar al servidor (Gmail bloca les data URIs i
+    no pot accedir a un servidor a la xarxa local).
     """
     full_name = _expected_full_name(item)
     subject = f"La teva visita a {settings.COMPANY_NAME} · {item.expected_date.strftime('%d/%m/%Y')}"
     base_url = settings.BASE_URL.rstrip("/")
     preregister_url = f"{base_url}/ca/code/{item.access_code}"
-    qr_url = f"{base_url}/qr/{item.access_code}.png"
+    qr_png = _generate_qr_png_bytes(preregister_url)
 
     html = templates.get_template("email/visitor_invitation.html").render(
         subject=subject,
@@ -1949,9 +1948,8 @@ def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
         visit_reason=item.visit_reason,
         access_code=item.access_code,
         preregister_url=preregister_url,
-        qr_url=qr_url,
     )
-    return subject, html
+    return subject, html, qr_png
 
 
 def _build_visitor_invitation_text(item: ExpectedVisit) -> str:
@@ -2618,9 +2616,12 @@ async def expected_send_visitor_invitation(
             status_code=302,
         )
 
-    subject, html = _render_visitor_invitation_html(item)
+    subject, html, qr_png = _render_visitor_invitation_html(item)
     text_body = _build_visitor_invitation_text(item)
-    ok, msg = await send_email([item.visitor_email], subject, text_body, html_body=html)
+    ok, msg = await send_email(
+        [item.visitor_email], subject, text_body,
+        html_body=html, qr_png=qr_png,
+    )
 
     if ok:
         item.visitor_invitation_sent_at = datetime.now(timezone.utc)
