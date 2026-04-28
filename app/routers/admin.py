@@ -19,7 +19,7 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
 from app.dependencies import get_current_admin, require_role
-from app.services.crypto import decrypt
+from app.services.crypto import decrypt, hash_id_document, normalize_id_document
 from app.services.email import send_email, smtp_configured
 from app.services.expected import find_matching_visit_for_expected
 from app.services.export import visits_to_excel, visits_to_csv
@@ -1158,6 +1158,105 @@ async def profile_save(
     admin.host_alias = (host_alias or "").strip() or None
     await db.commit()
     return RedirectResponse("/admin/profile?saved=1", status_code=302)
+
+
+# ── RGPD: cerca per DNI i dret d'oblit ────────────────────
+
+@router.get("/rgpd", response_class=HTMLResponse)
+async def rgpd_search_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+    q: str = Query(""),
+    anonymized: str = Query(""),
+):
+    """Cerca visites pel DNI normalitzat (HMAC). Permet exercir
+    el dret d'accés (mostrar les visites del visitant) i el dret
+    d'oblit (anonimitzar-les) sense haver de tocar SQL.
+    """
+    visits: list[Visit] = []
+    not_found = False
+    digest = None
+    if q.strip():
+        digest = hash_id_document(q)
+        result = await db.execute(
+            select(Visit)
+            .options(selectinload(Visit.department))
+            .where(Visit.id_document_hash == digest)
+            .order_by(Visit.checked_in_at.desc())
+        )
+        visits = result.scalars().all()
+        not_found = not visits
+
+    ctx = _admin_context(admin)
+    ctx.update({
+        "q": q.strip(),
+        "visits": visits,
+        "not_found": not_found,
+        "anonymized": anonymized,
+        "digest_preview": digest[:12] + "…" if digest else None,
+    })
+    return templates.TemplateResponse(request, "admin/rgpd.html", ctx)
+
+
+@router.post("/rgpd/anonymize")
+async def rgpd_anonymize(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+    q: str = Form(...),
+):
+    """Anonimitza totes les visites associades a un DNI.
+
+    L'estratègia és pseudonimització: substituïm les dades personals per
+    valors marca aigua i esborrem el ciphertext del DNI. Conservem
+    l'estructura (id, dates, departament, durada) per mantenir agregats
+    estadístics. Documentat com a alternativa preferent a l'esborrat
+    total fins als 5 anys.
+    """
+    if not q.strip():
+        return RedirectResponse("/admin/rgpd", status_code=302)
+
+    digest = hash_id_document(q)
+    result = await db.execute(
+        select(Visit).where(Visit.id_document_hash == digest)
+    )
+    visits = result.scalars().all()
+    if not visits:
+        return RedirectResponse("/admin/rgpd?anonymized=none", status_code=302)
+
+    placeholder = "[ANONIMITZAT]"
+    redacted_bytes = b""
+    count = 0
+    for v in visits:
+        v.first_name = placeholder
+        v.last_name = ""
+        v.company = placeholder
+        v.phone = None
+        v.id_document_enc = redacted_bytes
+        v.id_document_iv = redacted_bytes
+        v.id_document_hash = None
+        v.signature = None
+        v.user_agent = None
+        # ip_address es manté per traçabilitat tècnica però el visitant
+        # ja no es pot identificar a partir d'aquí.
+        count += 1
+
+    db.add(AuditLog(
+        admin_id=admin.id,
+        visit_id=None,
+        action="rgpd_anonymize",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({
+            "visits_affected": count,
+            "performed_at": datetime.now(timezone.utc).isoformat(),
+            # No conservem el DNI en clar: només el hash truncat com a
+            # referència interna per a futures auditories.
+            "digest_prefix": digest[:12],
+        }),
+    ))
+    await db.commit()
+    return RedirectResponse(f"/admin/rgpd?anonymized={count}", status_code=302)
 
 
 # ── Visites previstes ────────────────────────────────────

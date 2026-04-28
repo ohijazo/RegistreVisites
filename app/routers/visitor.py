@@ -382,6 +382,14 @@ async def legal_page(
     )
     legal_doc = result.scalar_one_or_none()
 
+    # Si no hi ha cap document legal actiu, no podem demanar consentiment.
+    # Mostrem la pàgina d'indisponibilitat amb missatge clar en lloc de
+    # deixar que la plantilla peti o que el flux acabi en error 503.
+    if not legal_doc:
+        ctx = _lang_context(lang)
+        ctx["error"] = t(lang, "error_system_unavailable")
+        return templates.TemplateResponse(request, "visitor/unavailable.html", ctx)
+
     ctx = _lang_context(lang)
     ctx["legal_doc"] = legal_doc
     ctx["error"] = None
@@ -465,7 +473,11 @@ async def submit_legal(
     )
     legal_doc = result.scalar_one_or_none()
     if not legal_doc:
-        return RedirectResponse(f"/{lang}/register", status_code=302)
+        # Mateix tractament que el GET: mostrar pàgina d'indisponibilitat
+        # en comptes de redirigir a un flux que tornarà a fallar.
+        ctx = _lang_context(lang)
+        ctx["error"] = t(lang, "error_system_unavailable")
+        return templates.TemplateResponse(request, "visitor/unavailable.html", ctx)
 
     # Generar tokens de sortida
     exit_token = secrets.token_urlsafe(32)

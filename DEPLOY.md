@@ -165,11 +165,21 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 11. Cron per neteja RGPD (eliminar visites > 2 anys)
+## 11. Cron de manteniment
+
+Tres tasques nocturnes: tancar visites obertes, purgar registres antics
+(RGPD) i — opcionalment — anonimitzar visitants concrets sota petició
+(això ja es fa des del panell `/admin/rgpd`).
 
 ```bash
 sudo crontab -u www-data -e
 # Afegir:
+
+# Auto-checkout nocturn: tanca visites obertes >12h amb checkout_method='auto_eod'.
+# Llindar configurable via AUTO_CLOSE_AFTER_HOURS al .env.
+55 23 * * * /opt/visites/venv/bin/python /opt/visites/scripts/auto_close_visits.py >> /var/log/visites/auto_close.log 2>&1
+
+# Neteja RGPD: elimina visites > 2 anys (article 5.1.e).
 0 3 * * * /opt/visites/venv/bin/python /opt/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
 ```
 

@@ -154,13 +154,57 @@ app.include_router(checkout.router)
 app.include_router(visitor.router)
 
 
+@app.get("/health/live")
+async def health_live():
+    """Liveness: l'app respon. No toca BD."""
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
+    """Healthcheck detallat: latència BD + comptadors útils. Pensat
+    per a sondes de monitoratge (Uptime Kuma, Zabbix, Nginx upstream)
+    i el dashboard de salut del panell admin."""
+    import time
+    started = time.monotonic()
     try:
         await db.execute(text("SELECT 1"))
-        return {"status": "ok"}
+        db_ok = True
+        db_latency_ms = round((time.monotonic() - started) * 1000, 1)
     except Exception:
-        return JSONResponse({"status": "error"}, status_code=503)
+        return JSONResponse(
+            {"status": "error", "db_ok": False, "env": settings.ENV},
+            status_code=503,
+        )
+
+    # Comptadors útils per a monitoratge
+    try:
+        from sqlalchemy import select, func
+        from app.db.models import Visit, ExpectedVisit
+        active_count = (await db.execute(
+            select(func.count(Visit.id)).where(Visit.checked_out_at.is_(None))
+        )).scalar() or 0
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).date()
+        expected_pending = (await db.execute(
+            select(func.count(ExpectedVisit.id)).where(
+                ExpectedVisit.expected_date == today,
+                ExpectedVisit.status == "pending",
+            )
+        )).scalar() or 0
+    except Exception:
+        active_count = None
+        expected_pending = None
+
+    return {
+        "status": "ok",
+        "db_ok": db_ok,
+        "db_latency_ms": db_latency_ms,
+        "env": settings.ENV,
+        "active_visits": active_count,
+        "expected_pending_today": expected_pending,
+        "smtp_configured": bool(settings.SMTP_HOST),
+    }
 
 
 @app.get("/")

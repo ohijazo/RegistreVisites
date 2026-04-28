@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     KIOSK_CONFIRM_SECONDS: int = 15
     MAX_VISIT_HOURS_WARN: int = 4
     MAX_VISIT_HOURS_ALERT: int = 8
+    AUTO_CLOSE_AFTER_HOURS: int = 12  # tancament automàtic de visites obertes
 
     COMPANY_NAME: str = "La Meva Empresa"
     COMPANY_ADDRESS: str = ""

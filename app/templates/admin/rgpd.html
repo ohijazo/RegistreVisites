@@ -1,0 +1,133 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}RGPD · Cerca i dret d'oblit{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">RGPD · Cerca per DNI</h1>
+
+    <p class="text-sm text-gray-700 mb-4">
+        Aquesta pàgina permet exercir els drets RGPD a partir del document
+        d'identitat del visitant: <strong>accés</strong> (veure totes les
+        visites associades) i <strong>oblit</strong> (anonimitzar-les
+        mantenint només els agregats).
+    </p>
+
+    {% if anonymized == 'none' %}
+    <div class="bg-yellow-50 border border-yellow-300 text-yellow-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        No s'han trobat visites associades a aquest document.
+    </div>
+    {% elif anonymized %}
+    <div class="bg-green-50 border border-green-300 text-green-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        S'han anonimitzat {{ anonymized }} {{ 'visita' if anonymized == '1' else 'visites' }} correctament.
+        L'acció ha quedat registrada al log d'auditoria.
+    </div>
+    {% endif %}
+
+    <!-- Cerca -->
+    <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+        <form method="GET" action="/admin/rgpd" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-64">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">
+                    Document d'identitat (DNI / NIE / Passaport) <span class="text-red-500">*</span>
+                </label>
+                <input type="text" name="q" required value="{{ q }}" autofocus
+                       placeholder="Ex: 12345678A"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-base font-mono">
+                <p class="text-xs text-gray-600 mt-1">
+                    El sistema busca pel HMAC-SHA256 normalitzat (sense desxifrar cap registre).
+                </p>
+            </div>
+            <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                Cercar
+            </button>
+        </form>
+        {% if digest_preview %}
+        <p class="text-xs text-gray-600 mt-3">
+            Hash de cerca: <span class="font-mono">{{ digest_preview }}</span>
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Resultats -->
+    {% if visits %}
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+        <div class="px-5 py-3 border-b border-gray-200 text-sm text-gray-700 font-medium">
+            S'han trobat {{ visits|length }} {{ 'visita' if visits|length == 1 else 'visites' }} associades a aquest document
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-gray-600 text-xs uppercase">
+                    <tr>
+                        <th class="px-5 py-3 text-left">Data entrada</th>
+                        <th class="px-5 py-3 text-left">Sortida</th>
+                        <th class="px-5 py-3 text-left">Visitant</th>
+                        <th class="px-5 py-3 text-left">Empresa</th>
+                        <th class="px-5 py-3 text-left">Departament</th>
+                        <th class="px-5 py-3 text-left"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for v in visits %}
+                    <tr class="{% if v.first_name == '[ANONIMITZAT]' %}bg-gray-50 italic{% endif %}">
+                        <td class="px-5 py-3 text-gray-800 whitespace-nowrap">{{ v.checked_in_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ v.checked_out_at.strftime('%d/%m/%Y %H:%M') if v.checked_out_at else '—' }}</td>
+                        <td class="px-5 py-3 text-gray-800">{{ v.first_name }}{% if v.last_name %} {{ v.last_name }}{% endif %}</td>
+                        <td class="px-5 py-3 text-gray-600">{{ v.company }}</td>
+                        <td class="px-5 py-3 text-gray-600">{{ v.department.name_ca if v.department else '—' }}</td>
+                        <td class="px-5 py-3">
+                            <a href="/admin/visits/{{ v.id }}"
+                               class="text-xs text-blue-700 hover:underline">Veure detall →</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Acció d'anonimització: només si encara queda alguna visita identificada #}
+    {% set has_pii = visits|selectattr('first_name', 'ne', '[ANONIMITZAT]')|list %}
+    {% if has_pii %}
+    <div class="bg-red-50 border border-red-300 rounded-xl p-5">
+        <h2 class="text-base font-semibold text-red-900 mb-2">Dret d'oblit (anonimització)</h2>
+        <p class="text-sm text-red-800 mb-4">
+            Anonimitzarà <strong>totes les {{ visits|length }} {{ 'visita' if visits|length == 1 else 'visites' }}</strong> associades a aquest document. Es conservaran:
+        </p>
+        <ul class="text-sm text-red-800 list-disc ml-6 mb-4 space-y-1">
+            <li>L'identificador intern (UUID) i les dates d'entrada/sortida</li>
+            <li>El departament i la durada (per a estadístiques agregades)</li>
+        </ul>
+        <p class="text-sm text-red-800 mb-4">S'eliminaran o pseudonimitzaran:</p>
+        <ul class="text-sm text-red-800 list-disc ml-6 mb-4 space-y-1">
+            <li>Nom, cognoms i empresa → <span class="font-mono">[ANONIMITZAT]</span></li>
+            <li>Telèfon i signatura → eliminats</li>
+            <li>DNI xifrat i el seu hash → eliminats (la cerca ja no funcionarà)</li>
+        </ul>
+        <p class="text-sm text-red-700 font-medium mb-4">Aquesta acció és irreversible i quedarà registrada al log d'auditoria.</p>
+
+        <form method="POST" action="/admin/rgpd/anonymize"
+              onsubmit="return confirm('Confirmeu l\\'anonimització de {{ visits|length }} visites? No es pot desfer.');">
+            {% include "_csrf.html" %}
+            <input type="hidden" name="q" value="{{ q }}">
+            <button type="submit"
+                    class="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                Anonimitzar totes les visites
+            </button>
+        </form>
+    </div>
+    {% else %}
+    <div class="bg-gray-50 border border-gray-300 rounded-xl p-4 text-sm text-gray-700">
+        Totes les visites d'aquest document ja estan anonimitzades.
+    </div>
+    {% endif %}
+
+    {% elif not_found %}
+    <div class="bg-yellow-50 border border-yellow-300 text-yellow-800 px-4 py-3 rounded-lg text-sm">
+        No s'han trobat visites associades al document
+        <span class="font-mono">{{ q }}</span>.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
