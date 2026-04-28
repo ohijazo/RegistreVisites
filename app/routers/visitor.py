@@ -12,7 +12,7 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import BlockedVisitor, Department, LegalDocument, Visit
 from app.services.crypto import encrypt, hash_id_document, normalize_id_document
-from app.services.expected import auto_link_expected_visit
+from app.services.expected import auto_link_expected_visit, find_active_expected_by_code
 from app.services.i18n import t, SUPPORTED_LANGS
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
@@ -107,6 +107,75 @@ async def action_page(lang: str, request: Request):
     if lang not in SUPPORTED_LANGS:
         return RedirectResponse("/ca/", status_code=302)
     return templates.TemplateResponse(request, "visitor/action.html", _lang_context(lang))
+
+
+@router.get("/{lang}/code", response_class=HTMLResponse)
+async def code_input_page(lang: str, request: Request):
+    """Pantalla on el visitant introdueix manualment el codi d'accés."""
+    if lang not in SUPPORTED_LANGS:
+        return RedirectResponse("/ca/", status_code=302)
+    ctx = _lang_context(lang)
+    ctx["error"] = None
+    return templates.TemplateResponse(request, "visitor/code.html", ctx)
+
+
+@router.post("/{lang}/code")
+@limiter.limit("10/minute")
+async def code_input_submit(
+    lang: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    access_code: str = Form(""),
+):
+    if lang not in SUPPORTED_LANGS:
+        return RedirectResponse("/ca/", status_code=302)
+    code = (access_code or "").strip().upper().replace("-", "").replace(" ", "")
+    if not code:
+        ctx = _lang_context(lang)
+        ctx["error"] = t(lang, "code_required")
+        return templates.TemplateResponse(request, "visitor/code.html", ctx)
+
+    expected = await find_active_expected_by_code(code, db)
+    if not expected:
+        ctx = _lang_context(lang)
+        ctx["error"] = t(lang, "code_invalid")
+        return templates.TemplateResponse(request, "visitor/code.html", ctx)
+
+    return RedirectResponse(f"/{lang}/code/{code}", status_code=302)
+
+
+@router.get("/{lang}/code/{access_code}")
+async def code_apply(
+    lang: str,
+    access_code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Aplica el codi: prefila la sessió amb les dades de la prevista i
+    redirigeix al formulari per omplir el que falta (típicament el DNI).
+    """
+    if lang not in SUPPORTED_LANGS:
+        return RedirectResponse("/ca/", status_code=302)
+
+    expected = await find_active_expected_by_code(access_code, db)
+    if not expected:
+        ctx = _lang_context(lang)
+        ctx["error"] = t(lang, "code_invalid")
+        return templates.TemplateResponse(request, "visitor/code.html", ctx)
+
+    # Prefila la sessió: el flux normal de /{lang}/register llegirà el draft
+    # i mostrarà els camps preomplerts. L'usuari només omple el DNI (i pot
+    # corregir res si cal).
+    request.session["visit_draft"] = {
+        "first_name": expected.visitor_first_name or "",
+        "last_name": expected.visitor_last_name or "",
+        "company": (expected.visitor_company or "").upper(),
+        "id_document": "",
+        "department_id": str(expected.department_id) if expected.department_id else "",
+        "visit_reason": expected.visit_reason or "",
+        "phone": expected.visitor_phone or "",
+    }
+    return RedirectResponse(f"/{lang}/register", status_code=302)
 
 
 @router.get("/{lang}/group", response_class=HTMLResponse)

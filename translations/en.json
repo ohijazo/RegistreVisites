@@ -73,6 +73,15 @@
   "error_dni_already_active": "This document already has an active visit. If you have left without registering your exit, please ask for help at reception.",
   "error_dni_blocked": "Registration cannot be completed. Please go to reception.",
 
+  "code_button": "I have a visit code",
+  "code_button_desc": "If you have been sent a fast-track access code, enter it here",
+  "code_input_title": "Enter the access code",
+  "code_input_subtitle": "You will find the code in the email or message that was sent to you. It has 8 characters.",
+  "code_input_placeholder": "ABCD1234",
+  "code_button_continue": "Continue",
+  "code_required": "An access code is required.",
+  "code_invalid": "Code not valid or already used. Please proceed with the normal registration.",
+
   "checkout_link": "Leaving? Register your exit here",
   "lookup_found": "Data retrieved from a previous visit.",
   "select_department": "-- Select --",

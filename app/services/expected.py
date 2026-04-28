@@ -17,6 +17,7 @@ treballant per a Otis es registra com a empresa pròpia) sense crear
 falsos positius en cas d'homònims, on encara cal coincidència
 estricta d'empresa.
 """
+import secrets
 import unicodedata
 from datetime import datetime, timedelta, timezone
 
@@ -24,6 +25,52 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ExpectedVisit, Visit
+
+
+# Alfabet sense ambigüitats (sense I, O, 0, 1) per a codis llegits
+# en veu alta o copiats a mà.
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_CODE_LENGTH = 8
+
+
+async def generate_unique_access_code(db: AsyncSession, max_attempts: int = 12) -> str:
+    """Genera un codi d'accés únic comprovant que no existeix a la BD.
+
+    Espai = 32^8 ≈ 1.1·10^12 combinacions; col·lisions extremadament
+    improbables, però comprovem igualment per estar segurs.
+    """
+    for _ in range(max_attempts):
+        code = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(_CODE_LENGTH))
+        existing = await db.execute(
+            select(ExpectedVisit.id).where(ExpectedVisit.access_code == code).limit(1)
+        )
+        if existing.scalar_one_or_none() is None:
+            return code
+    raise RuntimeError("No s'ha pogut generar un codi únic després de %d intents" % max_attempts)
+
+
+async def find_active_expected_by_code(code: str, db: AsyncSession) -> ExpectedVisit | None:
+    """Busca una visita prevista PENDENT i d'AVUI pel codi d'accés.
+
+    Retorna None si:
+      - El codi no existeix.
+      - L'estat ja no és 'pending' (s'ha cancel·lat, marcat com a no-show
+        o ja arribada).
+      - La data prevista no és avui (massa aviat o massa tard).
+      - Ja té una visita real vinculada.
+    """
+    if not code or not code.strip():
+        return None
+    today = datetime.now(timezone.utc).date()
+    result = await db.execute(
+        select(ExpectedVisit).where(
+            ExpectedVisit.access_code == code.strip().upper(),
+            ExpectedVisit.expected_date == today,
+            ExpectedVisit.status == "pending",
+            ExpectedVisit.visit_id.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 def _normalize_tokens(s: str) -> set[str]:

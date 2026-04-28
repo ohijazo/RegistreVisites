@@ -73,6 +73,15 @@
   "error_dni_already_active": "Ce document a déjà une visite en cours. Si vous êtes parti sans enregistrer votre sortie, demandez de l'aide à l'accueil.",
   "error_dni_blocked": "Impossible de finaliser l'enregistrement. Veuillez vous adresser à l'accueil.",
 
+  "code_button": "J'ai un code de visite",
+  "code_button_desc": "Si vous avez reçu un code d'accès rapide, saisissez-le ici",
+  "code_input_title": "Saisissez le code d'accès",
+  "code_input_subtitle": "Vous trouverez le code dans l'email ou le message qui vous a été envoyé. Il comporte 8 caractères.",
+  "code_input_placeholder": "ABCD1234",
+  "code_button_continue": "Continuer",
+  "code_required": "Veuillez saisir un code.",
+  "code_invalid": "Code non valide ou déjà utilisé. Veuillez procéder à l'enregistrement normal.",
+
   "checkout_link": "Vous partez ? Enregistrez la sortie ici",
   "lookup_found": "Données récupérées d'une visite précédente.",
   "select_department": "-- Sélectionnez --",

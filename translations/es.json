@@ -73,6 +73,15 @@
   "error_dni_already_active": "Este documento ya tiene una visita en curso. Si se ha marchado sin registrar la salida, pida ayuda en recepción.",
   "error_dni_blocked": "No es posible completar el registro. Por favor, diríjase a recepción.",
 
+  "code_button": "Tengo un código de visita",
+  "code_button_desc": "Si le han enviado un código de acceso rápido, introdúzcalo aquí",
+  "code_input_title": "Introduzca el código de acceso",
+  "code_input_subtitle": "Encontrará el código en el email o mensaje que le han enviado. Tiene 8 caracteres.",
+  "code_input_placeholder": "ABCD1234",
+  "code_button_continue": "Continuar",
+  "code_required": "Debe introducir un código.",
+  "code_invalid": "Código no válido o ya utilizado. Por favor, haga el registro normal.",
+
   "checkout_link": "¿Ya se va? Registre la salida aquí",
   "lookup_found": "Datos recuperados de una visita anterior.",
   "select_department": "-- Seleccione --",

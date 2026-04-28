@@ -21,7 +21,10 @@ from app.db.models import AdminUser, BlockedVisitor, Visit, Department, LegalDoc
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt, hash_id_document, normalize_id_document
 from app.services.email import send_email, smtp_configured
-from app.services.expected import find_matching_visit_for_expected
+from app.services.expected import (
+    find_matching_visit_for_expected,
+    generate_unique_access_code,
+)
 from app.services.export import visits_to_excel, visits_to_csv
 
 MIN_ADMIN_PASSWORD_LEN = 12
@@ -1775,6 +1778,7 @@ async def expected_create(
         notes=(notes or "").strip() or None,
         status="pending",
         created_by_id=admin.id,
+        access_code=await generate_unique_access_code(db),
     )
     db.add(item)
     await db.commit()
@@ -2061,12 +2065,13 @@ async def expected_import_submit(
         ctx["created"] = None
         return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
 
-    # Tot validat: crear-les
+    # Tot validat: crear-les amb codi d'accés únic per a cadascuna
     for d in rows_to_create:
         db.add(ExpectedVisit(
             **d,
             status="pending",
             created_by_id=admin.id,
+            access_code=await generate_unique_access_code(db),
         ))
     await db.commit()
     return RedirectResponse(
@@ -2145,6 +2150,42 @@ async def api_expected_events(
                 "borderColor": color_by_status.get(it.status, "#3b82f6"),
             })
     return events
+
+
+@router.get("/api/expected/{item_id}/qr.png")
+async def api_expected_qr(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist", "viewer")),
+):
+    """Genera un PNG amb el QR del codi d'accés de la prevista. El QR
+    codifica la URL completa al fast-track perquè el visitant pugui
+    escanejar-lo amb la càmera del mòbil."""
+    import base64
+    import io
+    import qrcode
+
+    result = await db.execute(
+        select(ExpectedVisit).where(ExpectedVisit.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item or not item.access_code:
+        return Response(status_code=404)
+
+    base_url = settings.BASE_URL.rstrip("/")
+    url = f"{base_url}/ca/code/{item.access_code}"
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/api/expected-banner", response_class=HTMLResponse)

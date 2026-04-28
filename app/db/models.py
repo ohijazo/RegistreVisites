@@ -151,6 +151,9 @@ class ExpectedVisit(Base):
     visit_id = Column(UUID(as_uuid=True), ForeignKey("visits.id"), nullable=True)
     visit = relationship("Visit", foreign_keys=[visit_id])
 
+    # Codi d'accés (8 chars) per al fast-track al quiosc o QR de pre-registre
+    access_code = Column(String(16), unique=True, index=True)
+
 
 class BlockedVisitor(Base):
     """DNI a la watchlist. Si el hash del visitant que es vol registrar

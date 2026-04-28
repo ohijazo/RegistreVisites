@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('code_input_title') }}{% endblock %}
+
+{% block body %}
+<div class="flex flex-col items-center justify-center min-h-screen px-4">
+    <h1 class="text-2xl font-bold text-gray-800 mb-3 text-center">
+        {{ t('code_input_title') }}
+    </h1>
+    <p class="text-base text-gray-700 mb-8 text-center max-w-md">
+        {{ t('code_input_subtitle') }}
+    </p>
+
+    {% if error %}
+    <div class="bg-red-100 border-2 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-6 max-w-md w-full text-center font-semibold" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/{{ lang }}/code" class="w-full max-w-md">
+        {% include "_csrf.html" %}
+        <input type="text" name="access_code" autocomplete="off" autofocus required
+               maxlength="16" minlength="6"
+               placeholder="{{ t('code_input_placeholder') }}"
+               style="text-transform: uppercase;"
+               class="touch-input w-full border-2 border-gray-300 rounded-lg px-4 py-4 text-center text-3xl font-mono tracking-widest mb-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        <button type="submit"
+                class="touch-btn w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-lg transition shadow-md">
+            {{ t('code_button_continue') }}
+        </button>
+    </form>
+
+    <div class="mt-8">
+        <a href="/{{ lang }}/action"
+           class="inline-block bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium px-6 py-3 transition">
+            {{ t('btn_back') }}
+        </a>
+    </div>
+</div>
+{% endblock %}
