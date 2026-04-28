@@ -7,7 +7,7 @@ import bleach
 from fastapi import APIRouter, Request, Depends, Form, Query, Response, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, func, and_, or_, text, delete
+from sqlalchemy import case, select, func, and_, or_, text, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from jose import jwt
@@ -332,10 +332,17 @@ async def dashboard(
     long_stay_count = sum(1 for v in active_visits if v.checked_in_at <= alert_cutoff)
 
     # Visites previstes per avui: incloem pendents + arribades (arribades
-    # surten tatxades com a checklist de progrés). El filtre "Les meves"
-    # només s'activa si l'admin té host_alias al perfil.
+    # surten tatxades com a checklist de progrés). Ordenem PENDENTS abans
+    # d'ARRIBADES perquè el cap vegi primer què queda per fer; dins de
+    # cada grup, ordre cronològic. El filtre "Les meves" només s'activa
+    # si l'admin té host_alias al perfil.
     today_date = now.date()
     expected_mine_active = bool(expected_mine) and bool(admin.host_alias)
+    pending_first = case(
+        (ExpectedVisit.status == "pending", 0),
+        (ExpectedVisit.status == "arrived", 1),
+        else_=2,
+    )
     expected_q = (
         select(ExpectedVisit)
         .options(selectinload(ExpectedVisit.department))
@@ -343,7 +350,7 @@ async def dashboard(
             ExpectedVisit.expected_date == today_date,
             ExpectedVisit.status.in_(["pending", "arrived"]),
         )
-        .order_by(ExpectedVisit.expected_time.asc().nullslast())
+        .order_by(pending_first, ExpectedVisit.expected_time.asc().nullslast())
     )
     if expected_mine_active:
         expected_q = expected_q.where(
@@ -2204,6 +2211,11 @@ async def api_expected_banner(
     """Fragment HTML del bàner de visites previstes (per a HTMX live update)."""
     today_date = datetime.now(timezone.utc).date()
     mine_active = bool(expected_mine) and bool(admin.host_alias)
+    pending_first = case(
+        (ExpectedVisit.status == "pending", 0),
+        (ExpectedVisit.status == "arrived", 1),
+        else_=2,
+    )
     stmt = (
         select(ExpectedVisit)
         .options(selectinload(ExpectedVisit.department))
@@ -2211,7 +2223,7 @@ async def api_expected_banner(
             ExpectedVisit.expected_date == today_date,
             ExpectedVisit.status.in_(["pending", "arrived"]),
         )
-        .order_by(ExpectedVisit.expected_time.asc().nullslast())
+        .order_by(pending_first, ExpectedVisit.expected_time.asc().nullslast())
     )
     if mine_active:
         stmt = stmt.where(ExpectedVisit.host_name.ilike(f"%{admin.host_alias}%"))

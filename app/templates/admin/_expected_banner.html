@@ -31,7 +31,7 @@
         </div>
     </div>
     <ul class="text-sm text-gray-700 space-y-1">
-        {% for item in expected_today[:5] %}
+        {% for item in expected_today[:8] %}
         <li class="flex items-center gap-2 {% if item.status == 'arrived' %}text-gray-500{% endif %}">
             <span class="w-5 inline-flex justify-center flex-shrink-0">
                 {% if item.status == 'arrived' %}
@@ -49,9 +49,9 @@
             {% endif %}
         </li>
         {% endfor %}
-        {% if expected_today_count > 5 %}
+        {% if expected_today_count > 8 %}
         <li class="text-xs text-gray-600 italic ml-7">
-            <a href="/admin/expected?range=today{% if expected_mine_active %}&mine=1{% endif %}" class="hover:underline">… i {{ expected_today_count - 5 }} més</a>
+            <a href="/admin/expected?range=today{% if expected_mine_active %}&mine=1{% endif %}" class="hover:underline">… i {{ expected_today_count - 8 }} més</a>
         </li>
         {% endif %}
     </ul>
