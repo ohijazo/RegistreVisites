@@ -17,7 +17,7 @@ from app.services.rate_limit import limiter
 
 from app.config import settings
 from app.db.database import get_db
-from app.db.models import AdminUser, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
+from app.db.models import AdminUser, BlockedVisitor, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt, hash_id_document, normalize_id_document
 from app.services.email import send_email, smtp_configured
@@ -1160,6 +1160,246 @@ async def profile_save(
     return RedirectResponse("/admin/profile?saved=1", status_code=302)
 
 
+# ── Dashboard de salut del sistema ─────────────────────────
+
+@router.get("/health-status", response_class=HTMLResponse)
+async def health_status_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+):
+    import time
+    started = time.monotonic()
+    try:
+        await db.execute(text("SELECT 1"))
+        db_latency_ms = round((time.monotonic() - started) * 1000, 1)
+        db_ok = True
+    except Exception:
+        db_latency_ms = None
+        db_ok = False
+
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    cutoff_24h = now - timedelta(hours=24)
+
+    # Comptadors operatius
+    active_visits = (await db.execute(
+        select(func.count(Visit.id)).where(Visit.checked_out_at.is_(None))
+    )).scalar() or 0
+    visits_today = (await db.execute(
+        select(func.count(Visit.id)).where(
+            Visit.checked_in_at >= datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+        )
+    )).scalar() or 0
+    expected_pending = (await db.execute(
+        select(func.count(ExpectedVisit.id)).where(
+            ExpectedVisit.expected_date == today,
+            ExpectedVisit.status == "pending",
+        )
+    )).scalar() or 0
+    blocked_active = (await db.execute(
+        select(func.count(BlockedVisitor.id)).where(
+            BlockedVisitor.active.is_(True),
+            or_(BlockedVisitor.expires_at.is_(None), BlockedVisitor.expires_at > now),
+        )
+    )).scalar() or 0
+
+    # Tendències d'auditoria (24h)
+    failed_logins_24h = (await db.execute(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.action == "failed_login",
+            AuditLog.created_at >= cutoff_24h,
+        )
+    )).scalar() or 0
+    blocked_attempts_24h = (await db.execute(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.action == "blocked_attempt",
+            AuditLog.created_at >= cutoff_24h,
+        )
+    )).scalar() or 0
+    view_id_24h = (await db.execute(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.action == "view_id_document",
+            AuditLog.created_at >= cutoff_24h,
+        )
+    )).scalar() or 0
+
+    # Última execució del cron auto-checkout
+    last_auto = (await db.execute(
+        select(AuditLog).where(AuditLog.action == "auto_checkout")
+        .order_by(AuditLog.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    # Mides de taula (Postgres específic)
+    try:
+        size_rows = (await db.execute(text(
+            "SELECT relname, pg_size_pretty(pg_total_relation_size(C.oid)) AS size, "
+            "n_live_tup AS rows FROM pg_class C "
+            "JOIN pg_namespace N ON N.oid = C.relnamespace "
+            "JOIN pg_stat_user_tables U ON U.relid = C.oid "
+            "WHERE relkind='r' AND nspname='public' "
+            "ORDER BY pg_total_relation_size(C.oid) DESC LIMIT 8"
+        ))).all()
+        table_sizes = [{"name": r[0], "size": r[1], "rows": r[2] or 0} for r in size_rows]
+    except Exception:
+        table_sizes = []
+
+    # Comprovació crítica de configuració
+    config_warnings = []
+    if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == settings.SECRET_KEY:
+        if settings.ENV == "production":
+            config_warnings.append("JWT_SECRET_KEY no és diferent de SECRET_KEY (prod).")
+    if not settings.LOOKUP_PEPPER and settings.ENV == "production":
+        config_warnings.append("LOOKUP_PEPPER no configurada (prod).")
+    if not settings.KIOSK_IP_ALLOWLIST and not settings.KIOSK_SHARED_SECRET and settings.ENV == "production":
+        config_warnings.append("Cap mecanisme d'autenticació de quiosc configurat (prod).")
+    legal_active = (await db.execute(
+        select(func.count(LegalDocument.id)).where(LegalDocument.active.is_(True))
+    )).scalar() or 0
+    if legal_active == 0:
+        config_warnings.append("No hi ha cap document legal actiu — el flux del visitant fallarà.")
+
+    ctx = _admin_context(admin)
+    ctx.update({
+        "db_ok": db_ok,
+        "db_latency_ms": db_latency_ms,
+        "active_visits": active_visits,
+        "visits_today": visits_today,
+        "expected_pending": expected_pending,
+        "blocked_active": blocked_active,
+        "failed_logins_24h": failed_logins_24h,
+        "blocked_attempts_24h": blocked_attempts_24h,
+        "view_id_24h": view_id_24h,
+        "last_auto_close": last_auto,
+        "table_sizes": table_sizes,
+        "config_warnings": config_warnings,
+        "smtp_configured": bool(settings.SMTP_HOST),
+        "auto_close_after_hours": settings.AUTO_CLOSE_AFTER_HOURS,
+        "now": now,
+    })
+    return templates.TemplateResponse(request, "admin/health_status.html", ctx)
+
+
+# ── Watchlist (DNIs bloquejats) ───────────────────────────
+
+@router.get("/blocked-visitors", response_class=HTMLResponse)
+async def blocked_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+    show: str = Query("active", pattern="^(active|all|expired)$"),
+):
+    stmt = select(BlockedVisitor).options(selectinload(BlockedVisitor.blocked_by))
+    now = datetime.now(timezone.utc)
+    if show == "active":
+        stmt = stmt.where(
+            BlockedVisitor.active.is_(True),
+            or_(BlockedVisitor.expires_at.is_(None), BlockedVisitor.expires_at > now),
+        )
+    elif show == "expired":
+        stmt = stmt.where(
+            or_(BlockedVisitor.active.is_(False),
+                and_(BlockedVisitor.expires_at.isnot(None), BlockedVisitor.expires_at <= now)),
+        )
+    stmt = stmt.order_by(BlockedVisitor.blocked_at.desc())
+
+    items = (await db.execute(stmt)).scalars().all()
+
+    ctx = _admin_context(admin)
+    ctx.update({"items": items, "show": show, "now": now})
+    return templates.TemplateResponse(request, "admin/blocked_visitors.html", ctx)
+
+
+@router.post("/blocked-visitors")
+async def blocked_create(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+    id_document: str = Form(...),
+    reason: str = Form(...),
+    internal_label: str = Form(""),
+    expires_at: str = Form(""),
+):
+    if not id_document.strip() or not reason.strip():
+        return RedirectResponse("/admin/blocked-visitors", status_code=302)
+
+    digest = hash_id_document(id_document)
+    expires_dt = None
+    if expires_at.strip():
+        try:
+            d = date.fromisoformat(expires_at.strip())
+            expires_dt = datetime.combine(d, datetime.max.time(), tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+    item = BlockedVisitor(
+        id_document_hash=digest,
+        reason=reason.strip(),
+        internal_label=(internal_label or "").strip() or None,
+        blocked_by_id=admin.id,
+        expires_at=expires_dt,
+        active=True,
+    )
+    db.add(item)
+    db.add(AuditLog(
+        admin_id=admin.id,
+        visit_id=None,
+        action="blocked_visitor_added",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({
+            "digest_prefix": digest[:12],
+            "reason": reason.strip()[:200],
+            "expires_at": expires_dt.isoformat() if expires_dt else None,
+        }),
+    ))
+    await db.commit()
+    return RedirectResponse("/admin/blocked-visitors", status_code=302)
+
+
+@router.post("/blocked-visitors/{item_id}/deactivate")
+async def blocked_deactivate(
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+):
+    result = await db.execute(select(BlockedVisitor).where(BlockedVisitor.id == item_id))
+    item = result.scalar_one_or_none()
+    if item:
+        item.active = False
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="blocked_visitor_deactivated",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({"blocked_id": str(item.id), "digest_prefix": item.id_document_hash[:12]}),
+        ))
+        await db.commit()
+    return RedirectResponse("/admin/blocked-visitors", status_code=302)
+
+
+@router.post("/blocked-visitors/{item_id}/delete")
+async def blocked_delete(
+    item_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+):
+    result = await db.execute(select(BlockedVisitor).where(BlockedVisitor.id == item_id))
+    item = result.scalar_one_or_none()
+    if item:
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="blocked_visitor_deleted",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({"digest_prefix": item.id_document_hash[:12]}),
+        ))
+        await db.delete(item)
+        await db.commit()
+    return RedirectResponse("/admin/blocked-visitors", status_code=302)
+
+
 # ── RGPD: cerca per DNI i dret d'oblit ────────────────────
 
 @router.get("/rgpd", response_class=HTMLResponse)
@@ -1645,6 +1885,193 @@ async def expected_print(
             "admin": admin,
             "mine_active": mine_active,
         },
+    )
+
+
+EXPECTED_CSV_HEADERS = [
+    "visitor_first_name", "visitor_last_name", "visitor_company",
+    "visitor_phone", "host_name", "department", "expected_date",
+    "expected_time", "visit_reason", "notes",
+]
+
+
+@router.get("/expected/import", response_class=HTMLResponse)
+async def expected_import_page(
+    request: Request,
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    ctx = _admin_context(admin)
+    ctx["headers"] = EXPECTED_CSV_HEADERS
+    ctx["errors"] = []
+    ctx["preview"] = []
+    ctx["created"] = None
+    return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
+
+
+@router.get("/expected/import/template")
+async def expected_import_template(
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    """Plantilla CSV buida amb les columnes correctes i una fila d'exemple."""
+    import csv
+    import io
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(EXPECTED_CSV_HEADERS)
+    writer.writerow([
+        "Maria", "Sànchez Pérez", "Test SL", "+34666123456",
+        "Joan Pi", "Direcció", "2026-05-15", "10:00",
+        "Reunió comercial trimestral", "",
+    ])
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="visites_previstes_plantilla.csv"'},
+    )
+
+
+@router.post("/expected/import")
+async def expected_import_submit(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    """Parseja un CSV de visites previstes i les crea en bloc (tot o res).
+
+    Si alguna fila falla la validació, no es crea cap previsió i es
+    retorna la mateixa pàgina amb la llista d'errors per fila.
+    """
+    import csv
+    import io
+
+    form = await request.form()
+    upload = form.get("file")
+    if not upload or not hasattr(upload, "read"):
+        ctx = _admin_context(admin)
+        ctx["headers"] = EXPECTED_CSV_HEADERS
+        ctx["errors"] = ["Cal seleccionar un fitxer CSV."]
+        ctx["preview"] = []
+        ctx["created"] = None
+        return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
+
+    raw = await upload.read()
+    if isinstance(raw, bytes):
+        try:
+            text_content = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text_content = raw.decode("latin-1")
+    else:
+        text_content = raw
+
+    # Carregar departaments per nom (case-insensitive contra el català)
+    dept_result = await db.execute(select(Department).where(Department.active.is_(True)))
+    dept_by_name = {d.name_ca.lower().strip(): d for d in dept_result.scalars().all()}
+
+    reader = csv.DictReader(io.StringIO(text_content))
+    if not reader.fieldnames:
+        ctx = _admin_context(admin)
+        ctx["headers"] = EXPECTED_CSV_HEADERS
+        ctx["errors"] = ["El CSV està buit o no té capçalera."]
+        ctx["preview"] = []
+        ctx["created"] = None
+        return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
+
+    missing_cols = [c for c in ("visitor_first_name", "host_name", "expected_date") if c not in reader.fieldnames]
+    if missing_cols:
+        ctx = _admin_context(admin)
+        ctx["headers"] = EXPECTED_CSV_HEADERS
+        ctx["errors"] = [f"Falten columnes obligatòries: {', '.join(missing_cols)}"]
+        ctx["preview"] = []
+        ctx["created"] = None
+        return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
+
+    rows_to_create: list[dict] = []
+    errors: list[str] = []
+    today = datetime.now(timezone.utc).date()
+
+    for line_no, row in enumerate(reader, start=2):  # capçalera = 1
+        first = (row.get("visitor_first_name") or "").strip()
+        last = (row.get("visitor_last_name") or "").strip() or None
+        company = (row.get("visitor_company") or "").strip() or None
+        phone = (row.get("visitor_phone") or "").strip() or None
+        host = (row.get("host_name") or "").strip()
+        dept_name = (row.get("department") or "").strip()
+        date_str = (row.get("expected_date") or "").strip()
+        time_str = (row.get("expected_time") or "").strip()
+        reason = (row.get("visit_reason") or "").strip() or None
+        notes = (row.get("notes") or "").strip() or None
+
+        if not first:
+            errors.append(f"Fila {line_no}: Nom del visitant és obligatori.")
+            continue
+        if not host:
+            errors.append(f"Fila {line_no}: Amfitrió és obligatori.")
+            continue
+
+        try:
+            expected_date = date.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            errors.append(f"Fila {line_no}: Data invàlida ('{date_str}'). Format requerit: AAAA-MM-DD.")
+            continue
+        if expected_date < today:
+            errors.append(f"Fila {line_no}: La data ({expected_date}) és al passat.")
+            continue
+
+        expected_time = None
+        if time_str:
+            try:
+                expected_time = datetime.strptime(time_str, "%H:%M").time()
+            except ValueError:
+                errors.append(f"Fila {line_no}: Hora invàlida ('{time_str}'). Format requerit: HH:MM.")
+                continue
+
+        dept = None
+        if dept_name:
+            dept = dept_by_name.get(dept_name.lower())
+            if not dept:
+                errors.append(f"Fila {line_no}: Departament '{dept_name}' no trobat. Comprova el nom (case-insensitive).")
+                continue
+
+        rows_to_create.append({
+            "visitor_first_name": first,
+            "visitor_last_name": last,
+            "visitor_company": company,
+            "visitor_phone": phone,
+            "host_name": host,
+            "department_id": dept.id if dept else None,
+            "expected_date": expected_date,
+            "expected_time": expected_time,
+            "visit_reason": reason,
+            "notes": notes,
+        })
+
+    if errors:
+        ctx = _admin_context(admin)
+        ctx["headers"] = EXPECTED_CSV_HEADERS
+        ctx["errors"] = errors
+        ctx["preview"] = rows_to_create
+        ctx["created"] = None
+        return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
+
+    if not rows_to_create:
+        ctx = _admin_context(admin)
+        ctx["headers"] = EXPECTED_CSV_HEADERS
+        ctx["errors"] = ["El CSV no conté cap fila vàlida."]
+        ctx["preview"] = []
+        ctx["created"] = None
+        return templates.TemplateResponse(request, "admin/expected_import.html", ctx)
+
+    # Tot validat: crear-les
+    for d in rows_to_create:
+        db.add(ExpectedVisit(
+            **d,
+            status="pending",
+            created_by_id=admin.id,
+        ))
+    await db.commit()
+    return RedirectResponse(
+        f"/admin/expected?range=upcoming&imported={len(rows_to_create)}",
+        status_code=302,
     )
 
 

@@ -1,0 +1,111 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Salut del sistema{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">Salut del sistema</h1>
+        <p class="text-xs text-gray-600">Generat: {{ now.strftime('%d/%m/%Y %H:%M') }} UTC</p>
+    </div>
+
+    {% if config_warnings %}
+    <div class="bg-red-50 border border-red-300 rounded-xl p-4 mb-6">
+        <h2 class="text-sm font-semibold text-red-900 mb-2">⚠ Avisos de configuració</h2>
+        <ul class="text-sm text-red-800 list-disc ml-6 space-y-1">
+            {% for w in config_warnings %}<li>{{ w }}</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Estat general -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 {% if db_ok %}border-green-500{% else %}border-red-500{% endif %}">
+            <p class="text-xs text-gray-600 uppercase">Base de dades</p>
+            <p class="text-lg font-bold mt-1 {% if db_ok %}text-green-700{% else %}text-red-700{% endif %}">
+                {% if db_ok %}OK · {{ db_latency_ms }} ms{% else %}ERROR{% endif %}
+            </p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 {% if smtp_configured %}border-blue-400{% else %}border-gray-300{% endif %}">
+            <p class="text-xs text-gray-600 uppercase">SMTP</p>
+            <p class="text-lg font-bold mt-1 {% if smtp_configured %}text-blue-700{% else %}text-gray-600{% endif %}">
+                {% if smtp_configured %}Configurat{% else %}No configurat{% endif %}
+            </p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-gray-300">
+            <p class="text-xs text-gray-600 uppercase">Auto-close</p>
+            <p class="text-lg font-bold text-gray-700 mt-1">{{ auto_close_after_hours }}h</p>
+            <p class="text-xs text-gray-600 mt-0.5">
+                {% if last_auto_close %}
+                Última: {{ last_auto_close.created_at.strftime('%d/%m %H:%M') }}
+                {% else %}Encara no s'ha executat{% endif %}
+            </p>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 {% if blocked_active > 0 %}border-red-400{% else %}border-gray-300{% endif %}">
+            <p class="text-xs text-gray-600 uppercase">Watchlist activa</p>
+            <p class="text-lg font-bold mt-1 {% if blocked_active > 0 %}text-red-700{% else %}text-gray-700{% endif %}">{{ blocked_active }}</p>
+        </div>
+    </div>
+
+    <!-- Comptadors operatius -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <p class="text-xs text-gray-600 uppercase mb-1">Operativa avui</p>
+            <ul class="text-sm space-y-1">
+                <li class="flex justify-between"><span class="text-gray-700">Visites actives</span><span class="font-bold text-blue-700">{{ active_visits }}</span></li>
+                <li class="flex justify-between"><span class="text-gray-700">Entrades avui</span><span class="font-bold text-gray-800">{{ visits_today }}</span></li>
+                <li class="flex justify-between"><span class="text-gray-700">Previstes pendents</span><span class="font-bold text-gray-800">{{ expected_pending }}</span></li>
+            </ul>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <p class="text-xs text-gray-600 uppercase mb-1">Auditoria (24h)</p>
+            <ul class="text-sm space-y-1">
+                <li class="flex justify-between">
+                    <a href="/admin/audit-logs?action=failed_login" class="text-gray-700 hover:underline">Logins fallits</a>
+                    <span class="font-bold {% if failed_logins_24h > 10 %}text-red-700{% else %}text-gray-800{% endif %}">{{ failed_logins_24h }}</span>
+                </li>
+                <li class="flex justify-between">
+                    <a href="/admin/audit-logs?action=blocked_attempt" class="text-gray-700 hover:underline">Intents bloquejats</a>
+                    <span class="font-bold {% if blocked_attempts_24h > 0 %}text-red-700{% else %}text-gray-800{% endif %}">{{ blocked_attempts_24h }}</span>
+                </li>
+                <li class="flex justify-between">
+                    <a href="/admin/audit-logs?action=view_id_document" class="text-gray-700 hover:underline">Visualitzacions DNI</a>
+                    <span class="font-bold text-gray-800">{{ view_id_24h }}</span>
+                </li>
+            </ul>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <p class="text-xs text-gray-600 uppercase mb-1">Endpoints</p>
+            <ul class="text-sm space-y-1">
+                <li><a href="/health" target="_blank" class="text-blue-700 hover:underline font-mono">/health</a> <span class="text-xs text-gray-600">(JSON detallat)</span></li>
+                <li><a href="/health/live" target="_blank" class="text-blue-700 hover:underline font-mono">/health/live</a> <span class="text-xs text-gray-600">(liveness sense BD)</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Mides de BD -->
+    {% if table_sizes %}
+    <div class="bg-white rounded-xl shadow-sm p-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Mides de taules</h2>
+        <table class="w-full text-sm">
+            <thead class="text-gray-600 text-xs uppercase">
+                <tr>
+                    <th class="text-left pb-2">Taula</th>
+                    <th class="text-right pb-2">Files</th>
+                    <th class="text-right pb-2">Mida</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for t in table_sizes %}
+                <tr>
+                    <td class="py-2 font-mono text-gray-800">{{ t.name }}</td>
+                    <td class="py-2 text-right text-gray-700">{{ '{:,}'.format(t.rows) }}</td>
+                    <td class="py-2 text-right text-gray-700">{{ t.size }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

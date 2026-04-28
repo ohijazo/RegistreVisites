@@ -5,17 +5,38 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.database import get_db
-from app.db.models import Department, LegalDocument, Visit
+from app.db.models import BlockedVisitor, Department, LegalDocument, Visit
 from app.services.crypto import encrypt, hash_id_document, normalize_id_document
 from app.services.expected import auto_link_expected_visit
 from app.services.i18n import t, SUPPORTED_LANGS
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
+
+
+async def _is_blocked_dni(dni: str, db: AsyncSession) -> bool:
+    """True si aquest DNI consta a la watchlist amb un bloqueig actiu
+    (active=True i, si té data d'expiració, encara no ha passat).
+    """
+    if not dni or not dni.strip():
+        return False
+    digest = hash_id_document(dni)
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(BlockedVisitor.id).where(
+            BlockedVisitor.id_document_hash == digest,
+            BlockedVisitor.active.is_(True),
+            or_(
+                BlockedVisitor.expires_at.is_(None),
+                BlockedVisitor.expires_at > now,
+            ),
+        ).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def _has_active_visit_for_dni(dni: str, db: AsyncSession) -> bool:
@@ -139,16 +160,31 @@ async def submit_group(
     )
     legal_doc = legal_result.scalar_one_or_none()
 
-    # Validar que cap dels DNIs ja consti com a visita activa. Bloquejar
-    # tot el grup si algun membre té duplicat (no creem visites parcials).
+    # Validar que cap dels DNIs sigui a la watchlist o ja tingui visita
+    # activa. Bloquejar tot el grup en qualsevol dels casos (no creem
+    # visites parcials).
+    blocked_members: list[str] = []
     duplicates: list[str] = []
     for i in range(len(names)):
         name = (names[i] if i < len(names) else "").strip()
         dni = (dnis[i] if i < len(dnis) else "").strip().upper()
         if not name or not dni:
             continue
-        if await _has_active_visit_for_dni(dni, db):
+        if await _is_blocked_dni(dni, db):
+            blocked_members.append(name)
+        elif await _has_active_visit_for_dni(dni, db):
             duplicates.append(name)
+
+    if blocked_members:
+        dept_result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        ctx = _lang_context(lang)
+        ctx["departments"] = dept_result.scalars().all()
+        # Missatge genèric (no revelem el motiu del bloqueig).
+        ctx["error"] = t(lang, "error_dni_blocked")
+        return templates.TemplateResponse(request, "visitor/group.html", ctx)
+
     if duplicates:
         dept_result = await db.execute(
             select(Department).where(Department.active.is_(True)).order_by(Department.order)
@@ -332,6 +368,27 @@ async def submit_register(
     if not visit_reason.strip():
         errors["visit_reason"] = t(lang, "error_required")
 
+    # Comprovar la watchlist: si el DNI consta com a bloquejat, retornem
+    # el mateix missatge genèric "dirigiu-vos a recepció" sense revelar
+    # cap detall (ni que existeix watchlist, ni el motiu).
+    if "id_document" not in errors:
+        if await _is_blocked_dni(id_document, db):
+            errors["id_document"] = t(lang, "error_dni_blocked")
+            # Audit (sense PII): només prefix del hash i ip.
+            from app.db.models import AuditLog
+            import json as _json
+            db.add(AuditLog(
+                admin_id=None,
+                visit_id=None,
+                action="blocked_attempt",
+                ip_address=request.client.host if request.client else None,
+                detail=_json.dumps({
+                    "digest_prefix": hash_id_document(id_document)[:12],
+                    "lang": lang,
+                }),
+            ))
+            await db.commit()
+
     # Bloquejar registres duplicats: si ja hi ha una visita activa amb
     # aquest DNI, no permetem crear-ne una altra fins que no es registri
     # la sortida (manualment des de recepció o pel mateix visitant).
@@ -446,6 +503,20 @@ async def submit_legal(
         ctx["legal_doc"] = legal_doc
         ctx["error"] = error_msg
         return templates.TemplateResponse(request, "visitor/legal.html", ctx)
+
+    # Safety net per a la watchlist: el bloqueig pot haver-se afegit
+    # mentre l'usuari estava al pas legal.
+    if await _is_blocked_dni(session_data["id_document"], db):
+        request.session.pop("visit_draft", None)
+        result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        departments = result.scalars().all()
+        ctx = _lang_context(lang)
+        ctx["departments"] = departments
+        ctx["errors"] = {"id_document": t(lang, "error_dni_blocked")}
+        ctx["form_data"] = session_data
+        return templates.TemplateResponse(request, "visitor/form.html", ctx)
 
     # Safety net: si entremig algú s'ha registrat amb el mateix DNI i
     # encara no ha sortit, no permetem crear-ne un altre.

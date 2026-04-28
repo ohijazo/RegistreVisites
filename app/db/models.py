@@ -152,6 +152,30 @@ class ExpectedVisit(Base):
     visit = relationship("Visit", foreign_keys=[visit_id])
 
 
+class BlockedVisitor(Base):
+    """DNI a la watchlist. Si el hash del visitant que es vol registrar
+    coincideix amb un bloqueig actiu (active=True i sense expirar),
+    el flux del quiosc el rebutja amb un missatge genèric ('demani
+    ajuda a recepció') sense revelar el motiu.
+
+    Cap PII al registre: només el HMAC del DNI (no es pot reconstruir
+    sense pebre). El camp internal_label és opcional, per identificar
+    el bloqueig al panell admin sense haver de recordar a quin DNI
+    correspon ('ex-empleat López', 'visitant problemàtic 2025-04').
+    """
+    __tablename__ = "blocked_visitors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_document_hash = Column(String(64), nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    blocked_by_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"))
+    blocked_by = relationship("AdminUser", foreign_keys=[blocked_by_id])
+    blocked_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True))  # null = permanent
+    active = Column(Boolean, default=True, nullable=False, index=True)
+    internal_label = Column(String(200))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

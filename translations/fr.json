@@ -71,6 +71,7 @@
   "error_invalid": "Format non valide.",
   "error_generic": "Une erreur s'est produite. Veuillez réessayer.",
   "error_dni_already_active": "Ce document a déjà une visite en cours. Si vous êtes parti sans enregistrer votre sortie, demandez de l'aide à l'accueil.",
+  "error_dni_blocked": "Impossible de finaliser l'enregistrement. Veuillez vous adresser à l'accueil.",
 
   "checkout_link": "Vous partez ? Enregistrez la sortie ici",
   "lookup_found": "Données récupérées d'une visite précédente.",
