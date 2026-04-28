@@ -1,12 +1,21 @@
 """Vinculació automàtica de visites previstes amb registres reals.
 
 Quan un visitant es registra al quiosc, busquem si hi ha una visita
-prevista per a avui que coincideixi (nom + empresa) i, si n'hi ha
-exactament una, hi posem visit_id i status='arrived'.
+prevista per a avui que coincideixi pel nom. La política és:
 
-L'estratègia evita falsos positius: si hi ha múltiples possibles
-coincidències o cap, no toquem res — el recepcionista pot vincular
-manualment via el botó del llistat.
+  1. Filtrar candidats del dia pendents pel nom (subset de tokens
+     normalitzats: minúscules, sense accents, sense paraules curtes).
+  2. Si hi ha exactament 1 candidat amb nom coincident → vincular
+     (encara que les empreses no quadrin: el nom complet és prou
+     identificador en el cas habitual).
+  3. Si hi ha múltiples candidats amb el mateix nom → exigir que
+     l'empresa coincideixi (normalitzada) per desempatar.
+  4. Si encara hi ha múltiples o cap → no vincular (estat segur).
+
+Aquesta política tolera variacions menors d'empresa (un visitant
+treballant per a Otis es registra com a empresa pròpia) sense crear
+falsos positius en cas d'homònims, on encara cal coincidència
+estricta d'empresa.
 """
 import unicodedata
 from datetime import datetime, timedelta, timezone
@@ -35,20 +44,46 @@ def _normalize_company(s: str) -> str:
     return " ".join(s.split())
 
 
+def _select_unique_match(
+    candidates: list[ExpectedVisit],
+    visit_tokens: set[str],
+    visit_company_norm: str,
+) -> ExpectedVisit | None:
+    """Aplica la política de match: nom primer, empresa com a desempat.
+
+    Retorna el candidat vinculable o None si no és segur vincular.
+    """
+    # Pas 1: filtrar pels que tenen el nom coincident (subset de tokens)
+    name_matches = [
+        e for e in candidates
+        if (toks := _normalize_tokens(
+            f"{e.visitor_first_name} {e.visitor_last_name or ''}"
+        )) and toks.issubset(visit_tokens)
+    ]
+    if len(name_matches) == 1:
+        return name_matches[0]
+    if len(name_matches) <= 1:
+        return None
+
+    # Pas 2: empat — restringir per empresa coincident (només si la prevista
+    # en té; si està buida, no es considera coincident en aquest pas).
+    company_matches = [
+        e for e in name_matches
+        if e.visitor_company
+        and _normalize_company(e.visitor_company) == visit_company_norm
+    ]
+    if len(company_matches) == 1:
+        return company_matches[0]
+    return None
+
+
 async def auto_link_expected_visit(
     visit: Visit, db: AsyncSession
 ) -> ExpectedVisit | None:
     """Cerca i vincula una visita prevista pendent del dia que coincideixi
     amb la visita acabada de crear. Retorna l'ExpectedVisit vinculat o None.
 
-    Criteri d'auto-vincle:
-      - expected_date == avui (UTC) AND status == 'pending' AND visit_id IS NULL
-      - Tots els tokens del visitor_name de la prevista apareixen al
-        first_name + last_name de la visita real (normalitzats).
-      - Si la prevista té visitor_company, ha de coincidir amb la de la
-        visita (normalitzada). Si no en té, només es valida pel nom.
-      - Exactament 1 candidat passa el filtre. 0 o ≥2 → no vincula
-        (evita falsos positius en cas d'homonímia).
+    Vegeu el docstring del mòdul per al criteri exacte.
     """
     today = datetime.now(timezone.utc).date()
     result = await db.execute(
@@ -65,22 +100,9 @@ async def auto_link_expected_visit(
     visit_tokens = _normalize_tokens(f"{visit.first_name} {visit.last_name}")
     visit_company = _normalize_company(visit.company)
 
-    matches: list[ExpectedVisit] = []
-    for exp in candidates:
-        exp_tokens = _normalize_tokens(
-            f"{exp.visitor_first_name} {exp.visitor_last_name or ''}"
-        )
-        if not exp_tokens or not exp_tokens.issubset(visit_tokens):
-            continue
-        if exp.visitor_company:
-            if _normalize_company(exp.visitor_company) != visit_company:
-                continue
-        matches.append(exp)
-
-    if len(matches) != 1:
+    matched = _select_unique_match(candidates, visit_tokens, visit_company)
+    if matched is None:
         return None
-
-    matched = matches[0]
     matched.visit_id = visit.id
     matched.status = "arrived"
     return matched
@@ -90,8 +112,8 @@ async def find_matching_visit_for_expected(
     expected: ExpectedVisit, db: AsyncSession
 ) -> Visit | None:
     """Sentit invers de l'auto-vincle: donada una visita prevista, busca
-    una visita real registrada avui que hi coincideixi. Útil quan
-    l'admin clica "Marcar arribada" manualment.
+    una visita real registrada avui que hi coincideixi (mateixa política
+    que `auto_link_expected_visit`: nom primer, empresa com a desempat).
     """
     today = datetime.now(timezone.utc).date()
     today_start = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
@@ -112,20 +134,29 @@ async def find_matching_visit_for_expected(
     )
     if not exp_tokens:
         return None
-    exp_company = (
+    exp_company_norm = (
         _normalize_company(expected.visitor_company)
-        if expected.visitor_company else None
+        if expected.visitor_company else ""
     )
 
-    matches: list[Visit] = []
-    for v in visits:
-        v_tokens = _normalize_tokens(f"{v.first_name} {v.last_name}")
-        if not exp_tokens.issubset(v_tokens):
-            continue
-        if exp_company and _normalize_company(v.company) != exp_company:
-            continue
-        matches.append(v)
-
-    if len(matches) != 1:
+    # Pas 1: filtrar visites pel nom (tokens de la prevista ⊆ tokens de la visita)
+    name_matches = [
+        v for v in visits
+        if exp_tokens.issubset(_normalize_tokens(f"{v.first_name} {v.last_name}"))
+    ]
+    if len(name_matches) == 1:
+        return name_matches[0]
+    if len(name_matches) <= 1:
         return None
-    return matches[0]
+
+    # Pas 2: empat — desempatar per empresa coincident només si la prevista
+    # té empresa explícita
+    if not exp_company_norm:
+        return None
+    company_matches = [
+        v for v in name_matches
+        if _normalize_company(v.company) == exp_company_norm
+    ]
+    if len(company_matches) == 1:
+        return company_matches[0]
+    return None
