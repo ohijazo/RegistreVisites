@@ -95,6 +95,51 @@ def _lang_context(lang: str) -> dict:
     }
 
 
+@router.get("/qr/{access_code}.png")
+async def public_qr(
+    access_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """QR PNG públic per a un codi d'accés vàlid. Endpoint sense
+    autenticació perquè els clients d'email (Gmail/Outlook) puguin
+    carregar la imatge des del correu HTML. El propi codi actua com
+    a "secret" — qualsevol que el conegui ja pot fer pre-registre,
+    així que servir-ne el QR no afegeix cap exposició addicional.
+    Retornem 404 si el codi no existeix.
+    """
+    import base64 as _b64
+    import io
+    import qrcode
+    from fastapi.responses import Response as _Response
+
+    # Validar que el codi existeixi (qualsevol estat — la prevista pot
+    # estar 'arrived'/'cancelled' i el visitant podria voler veure el
+    # seu codi igualment fins que es purgui).
+    from app.db.models import ExpectedVisit as _ExpectedVisit
+    code = (access_code or "").strip().upper()
+    if not code:
+        return _Response(status_code=404)
+    result = await db.execute(
+        select(_ExpectedVisit.id).where(_ExpectedVisit.access_code == code).limit(1)
+    )
+    if result.scalar_one_or_none() is None:
+        return _Response(status_code=404)
+
+    base_url = settings.BASE_URL.rstrip("/")
+    url = f"{base_url}/ca/code/{code}"
+    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return _Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.get("/{lang}/", response_class=HTMLResponse)
 async def language_page(lang: str, request: Request):
     if lang not in SUPPORTED_LANGS:

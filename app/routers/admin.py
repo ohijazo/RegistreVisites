@@ -1924,12 +1924,18 @@ def _generate_qr_data_uri(data: str) -> str:
 
 
 def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
-    """Renderitza el correu d'invitació al visitant. Retorna (subject, html)."""
+    """Renderitza el correu d'invitació al visitant. Retorna (subject, html).
+
+    El QR es serveix com a URL pública (no com a data URI base64) perquè
+    clients d'email com Gmail bloquen les imatges data: per seguretat.
+    Cal que BASE_URL del .env sigui accessible des d'Internet perquè el
+    QR es carregui al correu del visitant.
+    """
     full_name = _expected_full_name(item)
     subject = f"La teva visita a {settings.COMPANY_NAME} · {item.expected_date.strftime('%d/%m/%Y')}"
     base_url = settings.BASE_URL.rstrip("/")
     preregister_url = f"{base_url}/ca/code/{item.access_code}"
-    qr_data_uri = _generate_qr_data_uri(preregister_url)
+    qr_url = f"{base_url}/qr/{item.access_code}.png"
 
     html = templates.get_template("email/visitor_invitation.html").render(
         subject=subject,
@@ -1943,7 +1949,7 @@ def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
         visit_reason=item.visit_reason,
         access_code=item.access_code,
         preregister_url=preregister_url,
-        qr_data_uri=qr_data_uri,
+        qr_url=qr_url,
     )
     return subject, html
 
