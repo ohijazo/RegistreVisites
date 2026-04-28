@@ -11,10 +11,11 @@
     <button onclick="this.parentElement.classList.add('hidden')" class="text-green-700 font-bold text-lg">&times;</button>
 </div>
 
-{# Bàner de visites previstes amb live-update HTMX cada 30s #}
+{# Bàner de visites previstes — live-update cada 30s + refresh immediat
+   quan es detecta una nova arribada (esdeveniment 'refresh' disparat via JS). #}
 <div id="expected-banner-slot"
      hx-get="/admin/api/expected-banner{% if expected_mine_active %}?expected_mine=1{% endif %}"
-     hx-trigger="every 30s"
+     hx-trigger="every 30s, refresh"
      hx-target="this"
      hx-swap="innerHTML">
     {% include "admin/_expected_banner.html" %}
@@ -139,6 +140,11 @@
 
             if (newEntries > lastEntries) {
                 showAlert('Nova visita registrada');
+                // Refrescar el bàner de visites previstes immediatament
+                // perquè aparegui el tatxat sense esperar el cicle de 30s.
+                if (window.htmx) {
+                    htmx.trigger('#expected-banner-slot', 'refresh');
+                }
             } else if (newCount < lastCount) {
                 showAlert('Sortida registrada');
             }
