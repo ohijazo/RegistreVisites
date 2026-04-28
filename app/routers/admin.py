@@ -2459,6 +2459,9 @@ async def expected_detail(
         select(Department).where(Department.active.is_(True)).order_by(Department.order)
     )
     default_subject, default_body = _build_email_defaults(item)
+    default_notify_recipients = (
+        item.last_email_recipients or settings.EXPECTED_NOTIFY_RECIPIENTS or ""
+    )
 
     ctx = _admin_context(admin)
     ctx["item"] = item
@@ -2467,6 +2470,7 @@ async def expected_detail(
     ctx["smtp_ready"] = smtp_configured()
     ctx["default_email_subject"] = default_subject
     ctx["default_email_body"] = default_body
+    ctx["default_notify_recipients"] = default_notify_recipients
     ctx["email_sent"] = email_sent
     ctx["email_error"] = email_error
     ctx["invitation_sent"] = invitation_sent
@@ -2665,10 +2669,16 @@ async def expected_notify_email(
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(require_role("admin", "receptionist")),
     recipients: str = Form(...),
-    subject: str = Form(...),
-    body: str = Form(...),
 ):
-    result = await db.execute(select(ExpectedVisit).where(ExpectedVisit.id == item_id))
+    """Reenvia la notificació de la visita prevista (mateix correu HTML
+    que s'envia automàticament en crear-la). L'usuari només pot canviar
+    els destinataris — l'assumpte i el cos es regeneren a partir de les
+    dades actuals del registre per garantir consistència."""
+    result = await db.execute(
+        select(ExpectedVisit)
+        .where(ExpectedVisit.id == item_id)
+        .options(selectinload(ExpectedVisit.department))
+    )
     item = result.scalar_one_or_none()
     if not item:
         return RedirectResponse("/admin/expected", status_code=302)
@@ -2687,7 +2697,9 @@ async def expected_notify_email(
             status_code=302,
         )
 
-    ok, msg = await send_email(rcpts, subject.strip()[:300], body)
+    subject, body = _build_email_defaults(item)
+    html_body = _render_expected_email_html(item, subject)
+    ok, msg = await send_email(rcpts, subject, body, html_body=html_body)
 
     if ok:
         item.last_email_sent_at = datetime.now(timezone.utc)
@@ -2700,7 +2712,7 @@ async def expected_notify_email(
             detail=json.dumps({
                 "expected_id": str(item.id),
                 "recipients": rcpts,
-                "subject": subject.strip()[:300],
+                "subject": subject[:300],
             }),
         ))
         await db.commit()

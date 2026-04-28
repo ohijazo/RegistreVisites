@@ -100,29 +100,40 @@
                     </a>
                 </div>
 
-                {# Botó d'enviament al visitant #}
+                {# Botons d'enviament d'email #}
                 {% if is_editor %}
-                {% if item.visitor_email %}
-                <form method="POST" action="/admin/expected/{{ item.id }}/send-visitor-invitation"
-                      class="mb-2"
-                      onsubmit="return confirm('Enviar invitació amb el codi a {{ item.visitor_email }}?');">
-                    {% include "_csrf.html" %}
-                    <button type="submit" {% if not smtp_ready %}disabled title="Cal configurar el backend d'email al .env"{% endif %}
-                            class="text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
+                <div class="flex flex-wrap gap-2 mb-2">
+                    {% if item.visitor_email %}
+                    <form method="POST" action="/admin/expected/{{ item.id }}/send-visitor-invitation"
+                          onsubmit="return confirm('Enviar invitació amb el codi a {{ item.visitor_email }}?');">
+                        {% include "_csrf.html" %}
+                        <button type="submit" {% if not smtp_ready %}disabled title="Cal configurar el backend d'email al .env"{% endif %}
+                                class="text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                            {% if item.visitor_invitation_sent_at %}Reenviar invitació al visitant{% else %}Enviar invitació al visitant{% endif %}
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <button type="button"
+                            onclick="document.getElementById('email-modal').classList.remove('hidden')"
+                            {% if not smtp_ready %}disabled title="Cal configurar el backend d'email al .env"{% endif %}
+                            class="text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                         </svg>
-                        {% if item.visitor_invitation_sent_at %}Reenviar invitació al visitant{% else %}Enviar invitació al visitant{% endif %}
+                        Enviar notificació de visita
                     </button>
-                </form>
-                {% if item.visitor_invitation_sent_at %}
+                </div>
+                {% if item.visitor_email and item.visitor_invitation_sent_at %}
                 <p class="text-xs text-purple-700 mb-2">
                     Última invitació enviada al visitant el {{ item.visitor_invitation_sent_at.strftime('%d/%m/%Y a les %H:%M') }} a <span class="font-medium">{{ item.visitor_email }}</span>.
                 </p>
-                {% endif %}
-                {% else %}
+                {% elif not item.visitor_email %}
                 <p class="text-xs text-purple-700 mb-2 italic">
-                    💡 Per enviar el codi i el QR al visitant, afegeix-li un email al detall (clica "Editar").
+                    💡 Per enviar el codi al visitant, afegeix-li un email al detall (clica "Editar").
                 </p>
                 {% endif %}
                 {% endif %}
@@ -366,36 +377,34 @@
     {% endif %}
 </div>
 
-{# Modal de notificació per email #}
+{# Modal de notificació per email — només destinataris.
+   El cos del correu és sempre el mateix que s'envia automàticament
+   en crear la prevista (re-renderitzat al servidor). #}
 {% if is_editor %}
 <div id="email-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-800">Notificar visita per email</h2>
+            <h2 class="text-lg font-semibold text-gray-800">Enviar notificació de visita</h2>
             <button type="button"
                     onclick="document.getElementById('email-modal').classList.add('hidden')"
                     class="text-gray-600 hover:text-gray-800 text-2xl leading-none">&times;</button>
         </div>
         <form method="POST" action="/admin/expected/{{ item.id }}/notify-email" class="p-6 space-y-4">
             {% include "_csrf.html" %}
+            <p class="text-sm text-gray-700">
+                S'enviarà la mateixa notificació que es genera automàticament en crear la visita prevista, amb les dades actuals del registre.
+            </p>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Destinataris <span class="text-red-500">*</span></label>
                 <input type="text" name="recipients" required
                        placeholder="email1@empresa.com, email2@empresa.com"
-                       value="{{ item.last_email_recipients or '' }}"
+                       value="{{ default_notify_recipients }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">
                 <p class="text-xs text-gray-600 mt-1">Separa diversos emails amb comes.</p>
             </div>
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Assumpte <span class="text-red-500">*</span></label>
-                <input type="text" name="subject" required maxlength="300"
-                       value="{{ default_email_subject }}"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Cos del missatge <span class="text-red-500">*</span></label>
-                <textarea name="body" required rows="14"
-                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">{{ default_email_body }}</textarea>
+            <div class="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div class="font-semibold text-gray-700 mb-1">Assumpte</div>
+                <div class="font-mono">{{ default_email_subject }}</div>
             </div>
             <div class="flex justify-end gap-2 pt-2">
                 <button type="button"
@@ -405,7 +414,7 @@
                 </button>
                 <button type="submit"
                         class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
-                    Enviar email
+                    Enviar notificació
                 </button>
             </div>
         </form>
