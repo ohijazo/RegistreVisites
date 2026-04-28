@@ -1233,21 +1233,9 @@ async def health_status_page(
         .order_by(AuditLog.created_at.desc()).limit(1)
     )).scalar_one_or_none()
 
-    # Mides de taula (Postgres específic)
-    try:
-        size_rows = (await db.execute(text(
-            "SELECT relname, pg_size_pretty(pg_total_relation_size(C.oid)) AS size, "
-            "n_live_tup AS rows FROM pg_class C "
-            "JOIN pg_namespace N ON N.oid = C.relnamespace "
-            "JOIN pg_stat_user_tables U ON U.relid = C.oid "
-            "WHERE relkind='r' AND nspname='public' "
-            "ORDER BY pg_total_relation_size(C.oid) DESC LIMIT 8"
-        ))).all()
-        table_sizes = [{"name": r[0], "size": r[1], "rows": r[2] or 0} for r in size_rows]
-    except Exception:
-        table_sizes = []
-
-    # Comprovació crítica de configuració
+    # Comprovació crítica de configuració (executar abans de pg_class
+    # perquè una falla a aquella query pot deixar la transacció en
+    # estat 'aborted' i bloquejar totes les consultes posteriors).
     config_warnings = []
     if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == settings.SECRET_KEY:
         if settings.ENV == "production":
@@ -1261,6 +1249,24 @@ async def health_status_page(
     )).scalar() or 0
     if legal_active == 0:
         config_warnings.append("No hi ha cap document legal actiu — el flux del visitant fallarà.")
+
+    # Mides de taula (Postgres específic). Usem només pg_class (sempre
+    # accessible). reltuples és una estimació, prou bona per a aquest
+    # dashboard. Si igualment falla, rollback per no contaminar la
+    # transacció.
+    try:
+        size_rows = (await db.execute(text(
+            "SELECT relname, pg_size_pretty(pg_total_relation_size(C.oid)) AS size, "
+            "reltuples::bigint AS rows "
+            "FROM pg_class C "
+            "JOIN pg_namespace N ON N.oid = C.relnamespace "
+            "WHERE relkind='r' AND nspname='public' "
+            "ORDER BY pg_total_relation_size(C.oid) DESC LIMIT 10"
+        ))).all()
+        table_sizes = [{"name": r[0], "size": r[1], "rows": r[2] or 0} for r in size_rows]
+    except Exception:
+        await db.rollback()
+        table_sizes = []
 
     ctx = _admin_context(admin)
     ctx.update({
