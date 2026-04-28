@@ -1796,7 +1796,8 @@ async def _notify_expected_created(
         await db.refresh(item, attribute_names=["department"])
 
     subject, body = _build_email_defaults(item)
-    ok, msg = await send_email(recipients, subject, body)
+    html_body = _render_expected_email_html(item, subject)
+    ok, msg = await send_email(recipients, subject, body, html_body=html_body)
     if ok:
         item.last_email_sent_at = datetime.now(timezone.utc)
         item.last_email_recipients = ", ".join(recipients)
@@ -1901,6 +1902,26 @@ def _expected_full_name(item: ExpectedVisit) -> str:
     if item.visitor_last_name:
         parts.append(item.visitor_last_name)
     return " ".join(p for p in parts if p).strip()
+
+
+def _render_expected_email_html(item: ExpectedVisit, subject: str) -> str:
+    """Renderitza el cos HTML del correu de notificació amb la plantilla
+    Jinja2 dedicada per als emails. Cal que la relació item.department
+    ja estigui carregada (cap accés a BD aquí dins)."""
+    full_name = _expected_full_name(item)
+    return templates.get_template("email/expected_created.html").render(
+        subject=subject,
+        company_name=settings.COMPANY_NAME,
+        full_name=full_name,
+        visitor_company=item.visitor_company,
+        visitor_phone=item.visitor_phone,
+        host_name=item.host_name,
+        department_name=item.department.name_ca if item.department else None,
+        expected_date_display=item.expected_date.strftime("%d/%m/%Y"),
+        expected_time_display=item.expected_time.strftime("%H:%M") if item.expected_time else None,
+        visit_reason=item.visit_reason,
+        notes=item.notes,
+    )
 
 
 def _build_email_defaults(item: ExpectedVisit) -> tuple[str, str]:

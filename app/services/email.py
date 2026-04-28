@@ -47,12 +47,42 @@ def smtp_configured() -> bool:
     return bool(settings.SMTP_HOST)
 
 
+def text_to_html(text: str) -> str:
+    """Converteix text pla a HTML bàsic preservant els salts de línia.
+
+    - Escapa caràcters HTML especials.
+    - Línies en blanc dobles → paràgrafs separats.
+    - Línies simples → <br>.
+    """
+    import html
+    if not text:
+        return ""
+    escaped = html.escape(text)
+    paragraphs = escaped.split("\n\n")
+    parts = []
+    for p in paragraphs:
+        p = p.strip("\n")
+        if p:
+            parts.append("<p style=\"margin:0 0 12px 0;\">" + p.replace("\n", "<br>") + "</p>")
+    return "\n".join(parts)
+
+
 async def send_email(
     to: list[str],
     subject: str,
     body: str,
+    html_body: str | None = None,
 ) -> tuple[bool, str]:
-    """Punt d'entrada únic. Retorna (ok, missatge)."""
+    """Punt d'entrada únic. Retorna (ok, missatge).
+
+    Paràmetres:
+        to:        llista de destinataris.
+        subject:   assumpte.
+        body:      cos en text pla (sempre obligatori; serveix de fallback
+                   per a clients que no renderitzen HTML).
+        html_body: cos en HTML opcional. Si no es proporciona, es genera
+                   automàticament a partir del text pla.
+    """
     if not to:
         return False, "Cap destinatari"
 
@@ -60,24 +90,38 @@ async def send_email(
     # afegir al cos els destinataris reals per traçabilitat.
     if settings.EMAIL_OVERRIDE_RECIPIENT:
         original_to = ", ".join(to)
-        body = (
-            f"[PROVA — destinatari original: {original_to}]\n\n"
-            f"{body}"
-        )
+        prefix_text = f"[PROVA — destinatari original: {original_to}]\n\n"
+        body = prefix_text + body
+        if html_body:
+            html_body = (
+                f"<div style=\"background:#fef3c7;border:1px solid #f59e0b;"
+                f"padding:10px 14px;border-radius:6px;margin-bottom:16px;"
+                f"font-size:13px;color:#92400e;\">"
+                f"⚠ <strong>Mode prova</strong> — destinatari original: "
+                f"<code>{original_to}</code></div>" + html_body
+            )
         to = [settings.EMAIL_OVERRIDE_RECIPIENT]
         subject = f"[PROVA] {subject}"
 
+    # Si no s'ha proporcionat HTML, generar-lo a partir del text pla
+    # (sobretot perquè el flux de Power Automate té 'Es HTML?' actiu i
+    # altrament el text pla es renderitzaria sense salts de línia).
+    if html_body is None:
+        html_body = text_to_html(body)
+
     backend = settings.EMAIL_BACKEND
     if backend == "graph_ms":
-        return await _send_via_graph(to, subject, body)
+        return await _send_via_graph(to, subject, body, html_body)
     if backend == "power_automate":
-        return await _send_via_power_automate(to, subject, body)
-    return await _send_via_smtp(to, subject, body)
+        return await _send_via_power_automate(to, subject, body, html_body)
+    return await _send_via_smtp(to, subject, body, html_body)
 
 
 # ─── Backend SMTP ───────────────────────────────────────────────────
 
-async def _send_via_smtp(to: list[str], subject: str, body: str) -> tuple[bool, str]:
+async def _send_via_smtp(
+    to: list[str], subject: str, body: str, html_body: str | None = None
+) -> tuple[bool, str]:
     if not settings.SMTP_HOST:
         return False, "SMTP no configurat"
 
@@ -86,6 +130,8 @@ async def _send_via_smtp(to: list[str], subject: str, body: str) -> tuple[bool, 
     msg["To"] = ", ".join(to)
     msg["Subject"] = subject
     msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
 
     use_tls = settings.SMTP_PORT == 465
     start_tls = settings.SMTP_PORT in (587, 25) and not use_tls
@@ -151,17 +197,20 @@ async def _get_graph_token() -> tuple[str | None, str]:
 # ─── Backend Power Automate (webhook) ──────────────────────────────
 
 async def _send_via_power_automate(
-    to: list[str], subject: str, body: str
+    to: list[str], subject: str, body: str, html_body: str | None = None
 ) -> tuple[bool, str]:
     import httpx
 
     if not settings.POWER_AUTOMATE_WEBHOOK_URL:
         return False, "POWER_AUTOMATE_WEBHOOK_URL no configurat"
 
+    # El flux té 'Es HTML?' activat, per tant enviem el cos en HTML.
+    # Si l'usuari ha cridat send_email() sense html_body, ja s'haurà
+    # convertit a HTML al punt d'entrada.
     payload = {
         "to": to,
         "subject": subject,
-        "body": body,
+        "body": html_body or body,
     }
     headers = {"Content-Type": "application/json"}
     if settings.POWER_AUTOMATE_SECRET:
@@ -195,7 +244,9 @@ async def _send_via_power_automate(
         return False, f"Error Power Automate: {exc}"
 
 
-async def _send_via_graph(to: list[str], subject: str, body: str) -> tuple[bool, str]:
+async def _send_via_graph(
+    to: list[str], subject: str, body: str, html_body: str | None = None
+) -> tuple[bool, str]:
     import httpx
 
     if not settings.MS_SENDER_EMAIL:
@@ -205,10 +256,15 @@ async def _send_via_graph(to: list[str], subject: str, body: str) -> tuple[bool,
     if not token:
         return False, info
 
+    if html_body:
+        body_part = {"contentType": "HTML", "content": html_body}
+    else:
+        body_part = {"contentType": "Text", "content": body}
+
     payload = {
         "message": {
             "subject": subject,
-            "body": {"contentType": "Text", "content": body},
+            "body": body_part,
             "toRecipients": [
                 {"emailAddress": {"address": addr}} for addr in to
             ],
