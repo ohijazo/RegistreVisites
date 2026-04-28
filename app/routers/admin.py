@@ -1921,20 +1921,19 @@ def _generate_qr_png_bytes(data: str) -> bytes:
     return buffer.getvalue()
 
 
-def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str, bytes]:
+def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
     """Renderitza el correu d'invitació al visitant.
-    Retorna (subject, html, qr_png_bytes).
+    Retorna (subject, html).
 
-    El QR s'envia com a adjunt inline (cid:qr.png) dins del propi
-    correu — així viatja amb el missatge i no requereix que el client
-    d'email pugui arribar al servidor (Gmail bloca les data URIs i
-    no pot accedir a un servidor a la xarxa local).
+    L'invitació porta només el codi d'accés textual (gran i llegible)
+    i un botó "Pre-registrar-me ara". No s'envia el QR perquè aquesta
+    versió simplifica la integració amb Power Automate (sense adjunts
+    inline) i el codi és igualment fàcil d'introduir al quiosc.
     """
     full_name = _expected_full_name(item)
     subject = f"La teva visita a {settings.COMPANY_NAME} · {item.expected_date.strftime('%d/%m/%Y')}"
     base_url = settings.BASE_URL.rstrip("/")
     preregister_url = f"{base_url}/ca/code/{item.access_code}"
-    qr_png = _generate_qr_png_bytes(preregister_url)
 
     html = templates.get_template("email/visitor_invitation.html").render(
         subject=subject,
@@ -1949,7 +1948,7 @@ def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str, byte
         access_code=item.access_code,
         preregister_url=preregister_url,
     )
-    return subject, html, qr_png
+    return subject, html
 
 
 def _build_visitor_invitation_text(item: ExpectedVisit) -> str:
@@ -2616,11 +2615,10 @@ async def expected_send_visitor_invitation(
             status_code=302,
         )
 
-    subject, html, qr_png = _render_visitor_invitation_html(item)
+    subject, html = _render_visitor_invitation_html(item)
     text_body = _build_visitor_invitation_text(item)
     ok, msg = await send_email(
-        [item.visitor_email], subject, text_body,
-        html_body=html, qr_png=qr_png,
+        [item.visitor_email], subject, text_body, html_body=html,
     )
 
     if ok:
