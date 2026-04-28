@@ -55,6 +55,18 @@ async def send_email(
     """Punt d'entrada únic. Retorna (ok, missatge)."""
     if not to:
         return False, "Cap destinatari"
+
+    # Override per a proves: redirigir-ho tot a una adreça única i
+    # afegir al cos els destinataris reals per traçabilitat.
+    if settings.EMAIL_OVERRIDE_RECIPIENT:
+        original_to = ", ".join(to)
+        body = (
+            f"[PROVA — destinatari original: {original_to}]\n\n"
+            f"{body}"
+        )
+        to = [settings.EMAIL_OVERRIDE_RECIPIENT]
+        subject = f"[PROVA] {subject}"
+
     backend = settings.EMAIL_BACKEND
     if backend == "graph_ms":
         return await _send_via_graph(to, subject, body)
@@ -164,11 +176,20 @@ async def _send_via_power_automate(
                 json=payload,
                 headers=headers,
             )
-            # Power Automate retorna 200 si accepta la petició. 202 si la
-            # processa de manera diferida. Tots dos els considerem èxit
-            # (l'enviament real pot trigar uns segons al núvol).
+            # 200/202: acceptat directament (millor cas, configuració
+            # asíncrona del flux).
             if resp.status_code in (200, 202):
                 return True, "OK"
+            # 502 NoResponse: el flux està funcionant en background però
+            # el gateway de Power Automate ha excedit el seu timeout
+            # síncron. L'execució s'ha encolat correctament — el flux
+            # acabarà i enviarà l'email igualment. Considerem-ho èxit
+            # amb avís perquè altrament la creació de la prevista
+            # quedaria marcada com a fallida sense ser cert.
+            # Solució definitiva: activar 'Respuesta asíncrona' al
+            # trigger del flux.
+            if resp.status_code == 502 and "NoResponse" in resp.text:
+                return True, "queued (Power Automate gateway timeout — flux OK)"
             return False, f"Power Automate {resp.status_code}: {resp.text[:300]}"
     except Exception as exc:
         return False, f"Error Power Automate: {exc}"

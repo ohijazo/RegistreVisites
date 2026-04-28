@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     # notificació automàtica per defecte.
     EXPECTED_NOTIFY_RECIPIENTS: str = ""
 
+    # Vàlvula de seguretat per a entorns de prova: si està definida,
+    # tots els mails de qualsevol funcionalitat es redirigeixen a
+    # aquesta adreça en comptes dels destinataris originals. El cos
+    # del missatge inclou els destinataris reals com a referència.
+    # Deixar buit en producció.
+    EMAIL_OVERRIDE_RECIPIENT: str = ""
+
     ENV: str = "development"
     DEBUG: bool = False
 
