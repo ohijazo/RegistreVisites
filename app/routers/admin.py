@@ -1789,6 +1789,12 @@ async def _notify_expected_created(
         ))
         return
 
+    # _build_email_defaults accedeix a item.department (relació lazy);
+    # en context async cal carregar-la explícitament abans, altrament
+    # SQLAlchemy llança MissingGreenlet.
+    if item.department_id:
+        await db.refresh(item, attribute_names=["department"])
+
     subject, body = _build_email_defaults(item)
     ok, msg = await send_email(recipients, subject, body)
     if ok:
