@@ -1735,7 +1735,88 @@ async def expected_new_page(
     ctx["error"] = None
     ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
     ctx["form"] = {}
+    ctx["default_notify_recipients"] = settings.EXPECTED_NOTIFY_RECIPIENTS
     return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
+
+
+def _parse_email_list(value: str) -> list[str]:
+    """Separa una llista d'emails per comes/punt-i-comes i valida bàsicament."""
+    if not value:
+        return []
+    parts = []
+    for piece in value.replace(";", ",").split(","):
+        p = piece.strip()
+        if p and "@" in p and len(p) <= 320:
+            parts.append(p)
+    # Deduplicar mantenint l'ordre (case-insensitive)
+    seen = set()
+    deduped = []
+    for p in parts:
+        key = p.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(p)
+    return deduped
+
+
+async def _notify_expected_created(
+    db: AsyncSession,
+    request: Request,
+    admin: AdminUser,
+    item: ExpectedVisit,
+    recipients: list[str],
+) -> None:
+    """Envia la notificació automàtica de creació d'una visita prevista
+    i deixa rastre a audit_logs i als camps last_email_* del registre.
+
+    Si el backend no està configurat o l'enviament falla, només queda
+    rastre a audit_logs (no llança excepció — la creació no s'ha de
+    desfer per culpa d'un error d'email).
+    """
+    if not recipients:
+        return
+    if not smtp_configured():
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="expected_visit_email_skipped",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({
+                "expected_id": str(item.id),
+                "reason": "email_backend_not_configured",
+                "recipients": recipients,
+            }),
+        ))
+        return
+
+    subject, body = _build_email_defaults(item)
+    ok, msg = await send_email(recipients, subject, body)
+    if ok:
+        item.last_email_sent_at = datetime.now(timezone.utc)
+        item.last_email_recipients = ", ".join(recipients)
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="expected_visit_email_sent_auto",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({
+                "expected_id": str(item.id),
+                "recipients": recipients,
+                "subject": subject[:300],
+            }),
+        ))
+    else:
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="expected_visit_email_failed_auto",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({
+                "expected_id": str(item.id),
+                "recipients": recipients,
+                "error": msg[:400],
+            }),
+        ))
 
 
 @router.post("/expected")
@@ -1753,6 +1834,7 @@ async def expected_create(
     expected_time: str = Form(""),
     visit_reason: str = Form(""),
     notes: str = Form(""),
+    notify_recipients: str = Form(""),
 ):
     parsed_date = _parse_date_or(expected_date, None)
     if not parsed_date or not visitor_first_name.strip() or not host_name.strip():
@@ -1763,6 +1845,7 @@ async def expected_create(
         ctx["departments"] = dept_result.scalars().all()
         ctx["error"] = "Els camps Nom, Amfitrió i Data són obligatoris."
         ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
+        ctx["default_notify_recipients"] = settings.EXPECTED_NOTIFY_RECIPIENTS
         # Preservar el que l'usuari ja havia escrit per no haver-ho de teclejar de nou
         ctx["form"] = {
             "visitor_first_name": visitor_first_name,
@@ -1775,6 +1858,7 @@ async def expected_create(
             "expected_time": expected_time,
             "visit_reason": visit_reason,
             "notes": notes,
+            "notify_recipients": notify_recipients,
         }
         return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
 
@@ -1794,6 +1878,13 @@ async def expected_create(
         access_code=await generate_unique_access_code(db),
     )
     db.add(item)
+    await db.flush()  # perquè item.id estigui disponible per al log
+
+    # Notificació automàtica si hi ha destinataris (override del form
+    # o per defecte del .env)
+    recipients = _parse_email_list(notify_recipients)
+    await _notify_expected_created(db, request, admin, item, recipients)
+
     await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
 

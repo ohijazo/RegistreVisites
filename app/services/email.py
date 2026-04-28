@@ -1,9 +1,21 @@
-"""Servei d'enviament d'emails per SMTP (asíncron via aiosmtplib).
+"""Servei d'enviament d'emails amb dos backends pluggables.
 
-Usat per a notificacions manuals de visites previstes. La configuració SMTP
-prové de variables d'entorn (settings.SMTP_*). Si SMTP_HOST no està
-configurat, send_email retorna False sense fer res.
+Selecció via `settings.EMAIL_BACKEND`:
+  - 'smtp'      → SMTP clàssic (aiosmtplib)
+  - 'graph_ms'  → Microsoft Graph API (msal + httpx)
+
+El backend Graph és el recomanat per a comptes M365: sobreviu a la
+deprecació de SMTP AUTH i no requereix mantenir cap contrasenya
+"d'aplicació". Autentica amb el flux client-credentials d'Azure AD
+(`client_id` + `client_secret` registrats com a app a Entra ID amb
+permís d'aplicació `Mail.Send`).
+
+API pública (sense canvis respecte de la versió SMTP-only):
+    smtp_configured() -> bool
+    send_email(to, subject, body) -> tuple[bool, str]
 """
+import asyncio
+import time
 from email.message import EmailMessage
 
 import aiosmtplib
@@ -11,7 +23,21 @@ import aiosmtplib
 from app.config import settings
 
 
+# ─── Token cache compartit per als enviaments via Graph ────────────
+# In-process (per worker uvicorn). Es regenera automàticament quan
+# falten <60s per caducar. Token de Graph dura típicament 3600s.
+_graph_token_cache: dict = {"token": None, "expires_at": 0.0}
+
+
 def smtp_configured() -> bool:
+    """True si el backend actiu té tota la configuració necessària."""
+    if settings.EMAIL_BACKEND == "graph_ms":
+        return bool(
+            settings.MS_TENANT_ID
+            and settings.MS_CLIENT_ID
+            and settings.MS_CLIENT_SECRET
+            and settings.MS_SENDER_EMAIL
+        )
     return bool(settings.SMTP_HOST)
 
 
@@ -20,16 +46,19 @@ async def send_email(
     subject: str,
     body: str,
 ) -> tuple[bool, str]:
-    """Envia un email pla. Retorna (ok, missatge).
-
-    Pren la configuració de settings.SMTP_*. Si el port és 465 usa SMTPS
-    (TLS implícit); altrament usa STARTTLS si el servidor el suporta. Si
-    SMTP_USER està buit, no fa autenticació.
-    """
-    if not smtp_configured():
-        return False, "SMTP no configurat"
+    """Punt d'entrada únic. Retorna (ok, missatge)."""
     if not to:
         return False, "Cap destinatari"
+    if settings.EMAIL_BACKEND == "graph_ms":
+        return await _send_via_graph(to, subject, body)
+    return await _send_via_smtp(to, subject, body)
+
+
+# ─── Backend SMTP ───────────────────────────────────────────────────
+
+async def _send_via_smtp(to: list[str], subject: str, body: str) -> tuple[bool, str]:
+    if not settings.SMTP_HOST:
+        return False, "SMTP no configurat"
 
     msg = EmailMessage()
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER or "noreply@localhost"
@@ -51,6 +80,90 @@ async def send_email(
             start_tls=start_tls,
             timeout=15,
         )
-    except Exception as exc:  # aiosmtplib llança subclasses de SMTPException
+    except Exception as exc:
         return False, f"Error enviant email: {exc}"
     return True, "OK"
+
+
+# ─── Backend Microsoft Graph ────────────────────────────────────────
+
+def _acquire_graph_token_sync() -> tuple[str | None, str]:
+    """Obté un access token via client credentials flow. Síncron (msal
+    bloca el thread); s'invoca des d'un thread separat."""
+    import msal
+    authority = f"https://login.microsoftonline.com/{settings.MS_TENANT_ID}"
+    app = msal.ConfidentialClientApplication(
+        client_id=settings.MS_CLIENT_ID,
+        client_credential=settings.MS_CLIENT_SECRET,
+        authority=authority,
+    )
+    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    if "access_token" not in result:
+        err = result.get("error_description") or result.get("error") or "unknown"
+        return None, str(err)[:300]
+    return result["access_token"], str(result.get("expires_in", 3600))
+
+
+async def _get_graph_token() -> tuple[str | None, str]:
+    """Retorna (token, message). El token és None si hi ha error."""
+    if not all([settings.MS_TENANT_ID, settings.MS_CLIENT_ID, settings.MS_CLIENT_SECRET]):
+        return None, "Configuració M365 incompleta"
+
+    cached = _graph_token_cache.get("token")
+    expires = _graph_token_cache.get("expires_at", 0.0)
+    if cached and expires > time.time() + 60:
+        return cached, "cached"
+
+    # msal és síncron — l'envoltem amb to_thread per no bloquejar l'event loop
+    token, info = await asyncio.to_thread(_acquire_graph_token_sync)
+    if not token:
+        return None, f"No s'ha pogut obtenir token: {info}"
+    try:
+        ttl = int(info)
+    except (TypeError, ValueError):
+        ttl = 3600
+    _graph_token_cache["token"] = token
+    _graph_token_cache["expires_at"] = time.time() + ttl
+    return token, "fresh"
+
+
+async def _send_via_graph(to: list[str], subject: str, body: str) -> tuple[bool, str]:
+    import httpx
+
+    if not settings.MS_SENDER_EMAIL:
+        return False, "MS_SENDER_EMAIL no configurat"
+
+    token, info = await _get_graph_token()
+    if not token:
+        return False, info
+
+    payload = {
+        "message": {
+            "subject": subject,
+            "body": {"contentType": "Text", "content": body},
+            "toRecipients": [
+                {"emailAddress": {"address": addr}} for addr in to
+            ],
+        },
+        "saveToSentItems": "true",
+    }
+
+    url = (
+        "https://graph.microsoft.com/v1.0/users/"
+        f"{settings.MS_SENDER_EMAIL}/sendMail"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code in (200, 202):
+                return True, "OK"
+            # Errors típics: 401 token caducat, 403 permisos no concedits,
+            # 404 bústia inexistent, 503 servei no disponible.
+            return False, f"Graph {resp.status_code}: {resp.text[:300]}"
+    except Exception as exc:
+        return False, f"Error Graph: {exc}"

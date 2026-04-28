@@ -27,11 +27,27 @@ class Settings(BaseSettings):
     COMPANY_EMAIL: str = "dpo@empresa.com"
     BASE_URL: str = "http://localhost:8001"
 
+    # Backend d'enviament de mails: 'smtp' o 'graph_ms'.
+    # 'graph_ms' usa Microsoft Graph API (recomanat per a M365 modern,
+    # sobreviu a la deprecació de SMTP AUTH).
+    EMAIL_BACKEND: str = "smtp"
+
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "visites@empresa.com"
+
+    # Microsoft Graph (M365) — només cal si EMAIL_BACKEND=graph_ms
+    MS_TENANT_ID: str = ""
+    MS_CLIENT_ID: str = ""
+    MS_CLIENT_SECRET: str = ""
+    MS_SENDER_EMAIL: str = ""  # bústia que envia, ex: coromina@agrienergia.com
+
+    # Destinataris per defecte de la notificació automàtica al crear
+    # una visita prevista (separats per comes). Camp buit = sense
+    # notificació automàtica per defecte.
+    EXPECTED_NOTIFY_RECIPIENTS: str = ""
 
     ENV: str = "development"
     DEBUG: bool = False

@@ -165,7 +165,71 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 11. Cron de manteniment
+## 11. Email amb Microsoft 365 (Graph API, OAuth 2.0)
+
+Configuració recomanada per a comptes M365 corporatives. Sobreviu a la
+deprecació de SMTP AUTH i no requereix mantenir cap contrasenya
+d'aplicació al servidor.
+
+### a) Registrar una app a Entra ID
+
+1. Anar a **https://entra.microsoft.com** → Identidad → Aplicaciones →
+   Registros de aplicaciones → **Nuevo registro**.
+2. Nombre: `Registre Visites`. Tipus de cuenta: **Solo este inquilino**.
+   Redirect URI: deixar buit.
+3. A la pàgina de l'app, apuntar:
+   - **Application (client) ID**
+   - **Directory (tenant) ID**
+4. **Certificados y secretos** → Nuevo secreto → apuntar el `Valor`.
+5. **Permisos de API** → + Agregar permiso → Microsoft Graph → **Permisos
+   de aplicación** → marcar `Mail.Send` → Agregar.
+6. Clicar **"Conceder consentimiento de administrador"** (cal Global Admin
+   o Application Administrator del tenant).
+
+### b) Restringir l'app a una sola bústia (recomanat)
+
+Per defecte un `Mail.Send` d'aplicació pot enviar com a qualsevol bústia
+del tenant. Cal restringir-ho amb una `ApplicationAccessPolicy`:
+
+```powershell
+# Cal el rol Exchange Administrator
+Connect-ExchangeOnline
+
+New-ApplicationAccessPolicy `
+    -AppId <client_id> `
+    -PolicyScopeGroupId <bústia@empresa.com> `
+    -AccessRight RestrictAccess `
+    -Description "Restringir l'app del registre de visites a una sola bústia"
+```
+
+### c) Configuració al `.env`
+
+```bash
+EMAIL_BACKEND=graph_ms
+MS_TENANT_ID=<directory_tenant_id>
+MS_CLIENT_ID=<application_client_id>
+MS_CLIENT_SECRET=<valor_del_secret>
+MS_SENDER_EMAIL=coromina@empresa.com
+
+# Destinataris per defecte de la notificació al crear una prevista
+EXPECTED_NOTIFY_RECIPIENTS=cap@empresa.com,recepcio@empresa.com
+```
+
+### d) Verificació
+
+Després del reinici (`systemctl restart visites`), crea una visita
+prevista des de `/admin/expected/new`. Si tot està bé:
+- L'email arriba al destinatari (mira també la carpeta de Spam).
+- A `/admin/audit-logs?action=expected_visit_email_sent_auto` apareix
+  la traça.
+
+Si falla:
+- Mira `/admin/audit-logs?action=expected_visit_email_failed_auto` —
+  el camp `detail.error` indica què ha passat.
+- Errors típics: `401` (token), `403` (permís Mail.Send no concedit /
+  ApplicationAccessPolicy bloca la bústia), `404` (bústia no existeix).
+
+## 12. Cron de manteniment
 
 Tres tasques nocturnes: tancar visites obertes, purgar registres antics
 (RGPD) i — opcionalment — anonimitzar visitants concrets sota petició
@@ -183,7 +247,7 @@ sudo crontab -u www-data -e
 0 3 * * * /opt/visites/venv/bin/python /opt/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
 ```
 
-## 12. Backup diari de la base de dades
+## 13. Backup diari de la base de dades
 
 ```bash
 sudo mkdir -p /opt/backups/visites
@@ -194,7 +258,7 @@ sudo tee /etc/cron.d/visites-backup > /dev/null <<EOF
 EOF
 ```
 
-## 13. Verificar
+## 14. Verificar
 
 ```bash
 # Health check

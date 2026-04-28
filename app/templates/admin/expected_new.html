@@ -83,6 +83,24 @@
                 <textarea name="notes" rows="2"
                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ form.get('notes', '') }}</textarea>
             </div>
+
+            <div class="sm:col-span-2">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">
+                    Notificar per email a
+                </label>
+                <input type="text" name="notify_recipients"
+                       value="{{ form.get('notify_recipients', default_notify_recipients) }}"
+                       placeholder="emails separats per comes"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">
+                <p class="text-xs text-gray-600 mt-1">
+                    En crear la visita s'enviarà un email a aquests destinataris amb el resum.
+                    Deixa el camp en blanc per no enviar cap notificació.
+                    {% if not default_notify_recipients %}
+                    (Si vols un valor per defecte, configura
+                    <span class="font-mono">EXPECTED_NOTIFY_RECIPIENTS</span> al <span class="font-mono">.env</span>.)
+                    {% endif %}
+                </p>
+            </div>
         </div>
 
         <div class="flex gap-2 pt-2">
