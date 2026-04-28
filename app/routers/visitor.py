@@ -18,6 +18,25 @@ from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
 
 
+async def _has_active_visit_for_dni(dni: str, db: AsyncSession) -> bool:
+    """True si ja existeix una visita activa (sense checkout) amb aquest DNI.
+
+    Utilitza el hash HMAC indexat — no desxifra cap registre. Permet
+    bloquejar registres duplicats al quiosc quan algú encara consta com
+    a present a les instal·lacions.
+    """
+    if not dni or not dni.strip():
+        return False
+    digest = hash_id_document(dni)
+    result = await db.execute(
+        select(Visit.id).where(
+            Visit.id_document_hash == digest,
+            Visit.checked_out_at.is_(None),
+        ).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 def _is_kiosk_request(request: Request) -> bool:
     """Comprova si la petició ve d'una tablet de quiosc autoritzada.
 
@@ -119,6 +138,28 @@ async def submit_group(
         select(LegalDocument).where(LegalDocument.active.is_(True))
     )
     legal_doc = legal_result.scalar_one_or_none()
+
+    # Validar que cap dels DNIs ja consti com a visita activa. Bloquejar
+    # tot el grup si algun membre té duplicat (no creem visites parcials).
+    duplicates: list[str] = []
+    for i in range(len(names)):
+        name = (names[i] if i < len(names) else "").strip()
+        dni = (dnis[i] if i < len(dnis) else "").strip().upper()
+        if not name or not dni:
+            continue
+        if await _has_active_visit_for_dni(dni, db):
+            duplicates.append(name)
+    if duplicates:
+        dept_result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        ctx = _lang_context(lang)
+        ctx["departments"] = dept_result.scalars().all()
+        ctx["error"] = (
+            t(lang, "error_dni_already_active")
+            + " (" + ", ".join(duplicates) + ")"
+        )
+        return templates.TemplateResponse(request, "visitor/group.html", ctx)
 
     created_visits: list[Visit] = []
     for i in range(len(names)):
@@ -291,6 +332,13 @@ async def submit_register(
     if not visit_reason.strip():
         errors["visit_reason"] = t(lang, "error_required")
 
+    # Bloquejar registres duplicats: si ja hi ha una visita activa amb
+    # aquest DNI, no permetem crear-ne una altra fins que no es registri
+    # la sortida (manualment des de recepció o pel mateix visitant).
+    if "id_document" not in errors:
+        if await _has_active_visit_for_dni(id_document, db):
+            errors["id_document"] = t(lang, "error_dni_already_active")
+
     form_data = {
         "first_name": first_name.strip(),
         "last_name": last_name.strip(),
@@ -390,6 +438,22 @@ async def submit_legal(
         ctx["legal_doc"] = legal_doc
         ctx["error"] = error_msg
         return templates.TemplateResponse(request, "visitor/legal.html", ctx)
+
+    # Safety net: si entremig algú s'ha registrat amb el mateix DNI i
+    # encara no ha sortit, no permetem crear-ne un altre.
+    if await _has_active_visit_for_dni(session_data["id_document"], db):
+        # Tornar al formulari amb l'error perquè el visitant pugui editar
+        # el camp; netegem el draft només d'aquest camp i l'error.
+        request.session.pop("visit_draft", None)
+        result = await db.execute(
+            select(Department).where(Department.active.is_(True)).order_by(Department.order)
+        )
+        departments = result.scalars().all()
+        ctx = _lang_context(lang)
+        ctx["departments"] = departments
+        ctx["errors"] = {"id_document": t(lang, "error_dni_already_active")}
+        ctx["form_data"] = session_data
+        return templates.TemplateResponse(request, "visitor/form.html", ctx)
 
     # Xifrar DNI i precalcular el hash per a cerca
     enc, iv = encrypt(session_data["id_document"])

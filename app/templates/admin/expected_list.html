@@ -137,6 +137,8 @@
                     <td class="px-5 py-3 whitespace-nowrap">
                         {% if item.status == 'pending' %}
                         <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Pendent</span>
+                        {% elif item.status == 'arrived' and item.visit and item.visit.checked_out_at %}
+                        <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full" title="Va arribar i ja ha sortit">Completada</span>
                         {% elif item.status == 'arrived' %}
                         <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Arribada</span>
                         {% elif item.status == 'cancelled' %}

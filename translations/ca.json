@@ -70,6 +70,7 @@
   "error_required": "Aquest camp és obligatori.",
   "error_invalid": "Format no vàlid.",
   "error_generic": "S'ha produït un error. Torneu-ho a intentar.",
+  "error_dni_already_active": "Aquest document ja té una visita en curs. Si heu marxat sense registrar la sortida, demaneu ajuda a recepció.",
 
   "checkout_link": "Ja marxeu? Registreu la sortida aquí",
   "lookup_found": "Dades recuperades d'una visita anterior.",

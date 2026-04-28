@@ -70,6 +70,7 @@
   "error_required": "This field is required.",
   "error_invalid": "Invalid format.",
   "error_generic": "An error occurred. Please try again.",
+  "error_dni_already_active": "This document already has an active visit. If you have left without registering your exit, please ask for help at reception.",
 
   "checkout_link": "Leaving? Register your exit here",
   "lookup_found": "Data retrieved from a previous visit.",

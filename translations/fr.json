@@ -70,6 +70,7 @@
   "error_required": "Ce champ est obligatoire.",
   "error_invalid": "Format non valide.",
   "error_generic": "Une erreur s'est produite. Veuillez réessayer.",
+  "error_dni_already_active": "Ce document a déjà une visite en cours. Si vous êtes parti sans enregistrer votre sortie, demandez de l'aide à l'accueil.",
 
   "checkout_link": "Vous partez ? Enregistrez la sortie ici",
   "lookup_found": "Données récupérées d'une visite précédente.",
