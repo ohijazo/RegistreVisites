@@ -14,15 +14,6 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap">
             {% if is_editor %}
-            <button type="button"
-                    onclick="document.getElementById('email-modal').classList.remove('hidden')"
-                    {% if not smtp_ready %}disabled title="Cal configurar SMTP_HOST al .env"{% endif %}
-                    class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                </svg>
-                Notificar
-            </button>
             <button type="button" id="btn-edit"
                     onclick="toggleMode(true)"
                     class="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1">
@@ -114,7 +105,7 @@
                 {% if item.visitor_email %}
                 <form method="POST" action="/admin/expected/{{ item.id }}/send-visitor-invitation"
                       class="mb-2"
-                      onsubmit="return confirm('Enviar invitació amb el codi i el QR a {{ item.visitor_email }}?');">
+                      onsubmit="return confirm('Enviar invitació amb el codi a {{ item.visitor_email }}?');">
                     {% include "_csrf.html" %}
                     <button type="submit" {% if not smtp_ready %}disabled title="Cal configurar el backend d'email al .env"{% endif %}
                             class="text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
