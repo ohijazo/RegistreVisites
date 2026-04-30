@@ -1,0 +1,109 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Document legal{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl">
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+            <a href="/admin/legal" class="text-blue-600 hover:text-blue-800 text-sm">← Tornar als documents</a>
+            <h1 class="text-2xl font-bold text-gray-800">Document legal</h1>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if doc.active %}
+            <span class="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">Actiu</span>
+            {% else %}
+            <form method="POST" action="/admin/legal/{{ doc.id }}/activate" class="inline"
+                  onsubmit="return confirm('Activar aquest document? El document actiu actual passarà a inactiu.');">
+                {% include "_csrf.html" %}
+                <button type="submit" class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-medium transition">
+                    Activar aquesta versió
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5 mb-4 text-sm text-gray-700">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+                <div class="text-xs text-gray-500 uppercase tracking-wider">ID</div>
+                <div class="font-mono text-xs break-all">{{ doc.id }}</div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-500 uppercase tracking-wider">Hash</div>
+                <div class="font-mono text-xs">{{ doc.content_hash[:24] }}...</div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-500 uppercase tracking-wider">Creat el</div>
+                <div>{{ doc.created_at.strftime('%d/%m/%Y a les %H:%M') }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestanyes d'idioma -->
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="border-b border-gray-200 flex flex-wrap" role="tablist">
+            <button type="button" data-tab="ca"
+                    class="lang-tab px-5 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-700">
+                Català
+            </button>
+            <button type="button" data-tab="es"
+                    class="lang-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800">
+                Castellano
+            </button>
+            <button type="button" data-tab="fr"
+                    class="lang-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800">
+                Français
+            </button>
+            <button type="button" data-tab="en"
+                    class="lang-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-800">
+                English
+            </button>
+        </div>
+
+        <div id="pane-ca" class="lang-pane p-6 prose prose-sm max-w-none">
+            {{ doc.content_ca|safe }}
+        </div>
+        <div id="pane-es" class="lang-pane p-6 prose prose-sm max-w-none hidden">
+            {{ doc.content_es|safe }}
+        </div>
+        <div id="pane-fr" class="lang-pane p-6 prose prose-sm max-w-none hidden">
+            {{ doc.content_fr|safe }}
+        </div>
+        <div id="pane-en" class="lang-pane p-6 prose prose-sm max-w-none hidden">
+            {{ doc.content_en|safe }}
+        </div>
+    </div>
+</div>
+
+<style>
+    .lang-pane h3 { font-size: 1.05rem; font-weight: 600; color: #1f2937; margin: 1rem 0 0.5rem; }
+    .lang-pane h3:first-child { margin-top: 0; }
+    .lang-pane p { margin: 0.5rem 0; line-height: 1.55; }
+    .lang-pane ul, .lang-pane ol { margin: 0.5rem 0 0.75rem 1.25rem; }
+    .lang-pane ul { list-style: disc; }
+    .lang-pane ol { list-style: decimal; }
+    .lang-pane li { margin: 0.25rem 0; line-height: 1.5; }
+    .lang-pane strong { font-weight: 600; color: #111827; }
+    .lang-pane em { font-style: italic; }
+</style>
+
+<script>
+document.querySelectorAll('.lang-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var tab = btn.getAttribute('data-tab');
+        document.querySelectorAll('.lang-tab').forEach(function(b) {
+            b.classList.remove('border-blue-600', 'text-blue-700');
+            b.classList.add('border-transparent', 'text-gray-600');
+        });
+        btn.classList.remove('border-transparent', 'text-gray-600');
+        btn.classList.add('border-blue-600', 'text-blue-700');
+        document.querySelectorAll('.lang-pane').forEach(function(p) {
+            p.classList.add('hidden');
+        });
+        document.getElementById('pane-' + tab).classList.remove('hidden');
+    });
+});
+</script>
+{% endblock %}

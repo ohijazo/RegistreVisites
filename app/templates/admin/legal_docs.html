@@ -63,14 +63,21 @@
                     {% endif %}
                 </td>
                 <td class="px-5 py-3">
-                    {% if not doc.active %}
-                    <form method="POST" action="/admin/legal/{{ doc.id }}/activate" class="inline">
-                        {% include "_csrf.html" %}
-                        <button type="submit" class="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">
-                            Activar
-                        </button>
-                    </form>
-                    {% endif %}
+                    <div class="flex items-center gap-2">
+                        <a href="/admin/legal/{{ doc.id }}"
+                           class="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded font-medium">
+                            Veure
+                        </a>
+                        {% if not doc.active %}
+                        <form method="POST" action="/admin/legal/{{ doc.id }}/activate" class="inline"
+                              onsubmit="return confirm('Activar aquest document? El document actiu actual passarà a inactiu.');">
+                            {% include "_csrf.html" %}
+                            <button type="submit" class="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded">
+                                Activar
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
                 </td>
             </tr>
             {% endfor %}

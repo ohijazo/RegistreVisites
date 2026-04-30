@@ -1006,6 +1006,24 @@ async def legal_docs_page(
     return templates.TemplateResponse(request, "admin/legal_docs.html", context=ctx)
 
 
+@router.get("/legal/{doc_id}", response_class=HTMLResponse)
+async def legal_doc_detail(
+    doc_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+):
+    result = await db.execute(
+        select(LegalDocument).where(LegalDocument.id == doc_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        return RedirectResponse("/admin/legal", status_code=302)
+    ctx = _admin_context(admin)
+    ctx["doc"] = doc
+    return templates.TemplateResponse(request, "admin/legal_doc_detail.html", ctx)
+
+
 @router.post("/legal")
 async def create_legal_doc(
     request: Request,
