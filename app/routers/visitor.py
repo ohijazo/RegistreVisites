@@ -14,7 +14,7 @@ from app.db.models import BlockedVisitor, Department, LegalDocument, Visit
 from app.services.crypto import encrypt, hash_id_document, normalize_id_document
 from app.services.expected import auto_link_expected_visit, find_active_expected_by_code
 from app.services.i18n import t, SUPPORTED_LANGS
-from app.services.kiosk import is_kiosk_ip
+from app.services.kiosk import is_kiosk_request
 from app.services import risk_content
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
@@ -60,27 +60,8 @@ async def _has_active_visit_for_dni(dni: str, db: AsyncSession) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-def _is_kiosk_request(request: Request) -> bool:
-    """Comprova si la petició ve d'una tablet de quiosc autoritzada.
-
-    L'autorització és la conjunció de filtres configurats:
-      - KIOSK_IP_ALLOWLIST (CSV d'IPs): si està definit, la IP del client
-        ha de coincidir.
-      - KIOSK_SHARED_SECRET: si està definit, ha d'arribar el header
-        X-Kiosk-Secret igual al configurat (constant-time compare).
-    Si cap dels dos està configurat, en producció es bloqueja (config.py
-    no permet aquesta combinació en prod) i en dev passa.
-    """
-    if settings.KIOSK_IP_ALLOWLIST:
-        if not is_kiosk_ip(request.client.host if request.client else ""):
-            return False
-    if settings.KIOSK_SHARED_SECRET:
-        provided = request.headers.get("X-Kiosk-Secret", "")
-        if not secrets.compare_digest(provided, settings.KIOSK_SHARED_SECRET):
-            return False
-    if not settings.KIOSK_IP_ALLOWLIST and not settings.KIOSK_SHARED_SECRET:
-        return settings.ENV != "production"
-    return True
+# is_kiosk_request s'importa des d'app.services.kiosk i accepta dispositius
+# matriculats per cookie, IPs autoritzades i header KIOSK_SHARED_SECRET.
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -413,7 +394,7 @@ async def lookup_visitor(
     Restringit a tablets de quiosc (IP allowlist + header secret). Cerca per
     HMAC-SHA256 indexat — no desxifra cap registre.
     """
-    if not _is_kiosk_request(request):
+    if not await is_kiosk_request(request, db):
         # 404 dissimulat — no revelar l'existència de l'endpoint.
         raise HTTPException(status_code=404)
 

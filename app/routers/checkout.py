@@ -13,7 +13,7 @@ from app.db.database import get_db
 from app.db.models import Visit, AuditLog
 from app.services.crypto import hash_id_document, normalize_id_document
 from app.services.i18n import t, DEFAULT_LANG
-from app.services.kiosk import is_kiosk_ip
+from app.services.kiosk import is_kiosk_request
 from app.services.rate_limit import limiter
 
 router = APIRouter(prefix="/checkout")
@@ -29,11 +29,8 @@ def _ctx(request: Request, error=None):
     return {"t": lambda key, **kw: t(lang, key, **kw), "lang": lang, "error": error}
 
 
-def _is_kiosk_ip(request: Request) -> bool:
-    """True si la IP del client està a KIOSK_IP_ALLOWLIST. Accepta IPs
-    individuals i rangs CIDR. En dev, sense allowlist configurada,
-    es tracta qualsevol client com a quiosc."""
-    return is_kiosk_ip(request.client.host if request.client else "")
+# El checkout per DNI s'autoritza si la petició s'identifica com a quiosc
+# (cookie matriculada / IP / header) o si el visitant aporta DNI + PIN.
 
 
 async def _audit(
@@ -98,7 +95,7 @@ async def checkout_dni(
     )
     visit = result.scalar_one_or_none()
 
-    is_kiosk = _is_kiosk_ip(request)
+    is_kiosk = await is_kiosk_request(request, db)
     pin_ok = bool(
         visit
         and exit_pin

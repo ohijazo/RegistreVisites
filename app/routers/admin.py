@@ -17,7 +17,7 @@ from app.services.rate_limit import limiter
 
 from app.config import settings
 from app.db.database import get_db
-from app.db.models import AdminUser, BlockedVisitor, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
+from app.db.models import AdminUser, BlockedVisitor, KioskDevice, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt, hash_id_document, normalize_id_document
 from app.services.email import send_email, smtp_configured
@@ -26,6 +26,10 @@ from app.services.expected import (
     generate_unique_access_code,
 )
 from app.services.export import visits_to_excel, visits_to_csv
+from app.services.kiosk import (
+    KIOSK_COOKIE_NAME, KIOSK_COOKIE_MAX_AGE,
+    generate_token, hash_token,
+)
 
 MIN_ADMIN_PASSWORD_LEN = 12
 
@@ -2757,3 +2761,140 @@ async def expected_notify_email(
         f"/admin/expected/{item.id}?email_error={quote(msg[:200])}",
         status_code=302,
     )
+
+
+# ── Dispositius de quiosc ────────────────────────────────────────────────
+
+@router.get("/kiosk/devices", response_class=HTMLResponse)
+async def kiosk_devices_list(
+    request: Request,
+    admin: AdminUser = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Llistat de dispositius matriculats com a quiosc.
+
+    Inclou flag `current_device_enrolled` perquè el template pugui
+    canviar el botó d'inscripció ("Matricular aquest dispositiu") per
+    un indicatiu si la tablet ja està matriculada.
+    """
+    from app.services.kiosk import find_active_device_by_token
+    result = await db.execute(
+        select(KioskDevice).order_by(KioskDevice.enrolled_at.desc())
+    )
+    devices = result.scalars().all()
+
+    current_token = request.cookies.get(KIOSK_COOKIE_NAME, "")
+    current_device = (
+        await find_active_device_by_token(current_token, db)
+        if current_token else None
+    )
+
+    ctx = _admin_context(admin)
+    ctx["devices"] = devices
+    ctx["current_device"] = current_device
+    return templates.TemplateResponse(request, "admin/kiosk_devices.html", ctx)
+
+
+@router.post("/kiosk/enroll")
+async def kiosk_enroll(
+    request: Request,
+    alias: str = Form(...),
+    notes: str = Form(""),
+    admin: AdminUser = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Matricula el dispositiu actual com a quiosc. Genera un token,
+    en guarda el hash i instal·la la cookie corresponent al navegador."""
+    alias = (alias or "").strip()[:200] or "Sense nom"
+    notes_clean = (notes or "").strip()[:1000] or None
+
+    # Si la tablet ja té cookie i el token apunta a un device actiu,
+    # avisem en lloc de crear un duplicat.
+    existing_token = request.cookies.get(KIOSK_COOKIE_NAME, "")
+    if existing_token:
+        result = await db.execute(
+            select(KioskDevice).where(
+                KioskDevice.token_hash == hash_token(existing_token),
+                KioskDevice.revoked_at.is_(None),
+            )
+        )
+        if result.scalar_one_or_none():
+            return RedirectResponse(
+                "/admin/kiosk/devices?msg=already_enrolled",
+                status_code=302,
+            )
+
+    token = generate_token()
+    device = KioskDevice(
+        alias=alias,
+        token_hash=hash_token(token),
+        enrolled_by_id=admin.id,
+        notes=notes_clean,
+    )
+    db.add(device)
+    db.add(AuditLog(
+        admin_id=admin.id,
+        action="kiosk_enroll",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({"alias": alias}),
+    ))
+    await db.commit()
+
+    response = RedirectResponse(
+        "/admin/kiosk/devices?msg=enrolled",
+        status_code=302,
+    )
+    response.set_cookie(
+        key=KIOSK_COOKIE_NAME,
+        value=token,
+        max_age=KIOSK_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="strict",
+        secure=settings.BASE_URL.startswith("https://"),
+        path="/",
+    )
+    return response
+
+
+@router.post("/kiosk/devices/{device_id}/revoke")
+async def kiosk_revoke(
+    request: Request,
+    device_id: str,
+    admin: AdminUser = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoca un dispositiu. Manté la fila per traçabilitat (qui i quan)."""
+    result = await db.execute(
+        select(KioskDevice).where(KioskDevice.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404)
+    if device.revoked_at is None:
+        device.revoked_at = datetime.now(timezone.utc)
+        device.revoked_by_id = admin.id
+        db.add(AuditLog(
+            admin_id=admin.id,
+            action="kiosk_revoke",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({"device_id": str(device.id), "alias": device.alias}),
+        ))
+        await db.commit()
+    return RedirectResponse("/admin/kiosk/devices?msg=revoked", status_code=302)
+
+
+@router.post("/kiosk/unenroll-self")
+async def kiosk_unenroll_self(
+    request: Request,
+    admin: AdminUser = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Esborra la cookie de quiosc del dispositiu actual sense revocar la
+    fila (útil si vols deixar de servir-la com a quiosc però mantenir-la
+    activa)."""
+    response = RedirectResponse(
+        "/admin/kiosk/devices?msg=unenrolled",
+        status_code=302,
+    )
+    response.delete_cookie(KIOSK_COOKIE_NAME, path="/")
+    return response

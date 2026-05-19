@@ -88,6 +88,10 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                     Watchlist
                 </a>
+                <a href="/admin/kiosk/devices" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if '/kiosk' in request.url.path %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-50{% endif %}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                    Dispositius quiosc
+                </a>
                 <a href="/admin/health-status" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if '/health-status' in request.url.path %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-50{% endif %}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2 4 4 6-6 4 4 2-2"/></svg>
                     Salut del sistema

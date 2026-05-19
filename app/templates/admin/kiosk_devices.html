@@ -1,0 +1,179 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Dispositius de quiosc{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Dispositius de quiosc</h1>
+</div>
+
+{% set msg = request.query_params.get('msg') %}
+{% if msg == 'enrolled' %}
+<div class="bg-green-100 border border-green-400 text-green-800 px-4 py-3 rounded-lg mb-4">
+    ✓ Dispositiu matriculat. Aquesta tablet ja pot fer servir el lookup
+    de visitants i el checkout per DNI sense PIN.
+</div>
+{% elif msg == 'already_enrolled' %}
+<div class="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded-lg mb-4">
+    Aquest dispositiu ja estava matriculat.
+</div>
+{% elif msg == 'revoked' %}
+<div class="bg-blue-100 border border-blue-400 text-blue-800 px-4 py-3 rounded-lg mb-4">
+    Dispositiu revocat correctament.
+</div>
+{% elif msg == 'unenrolled' %}
+<div class="bg-blue-100 border border-blue-400 text-blue-800 px-4 py-3 rounded-lg mb-4">
+    Cookie de quiosc esborrada del navegador actual.
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Matriculació del dispositiu actual -->
+    <div class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">Matricular aquest dispositiu</h2>
+        {% if current_device %}
+        <p class="text-gray-600 mb-3">
+            Aquest dispositiu ja està matriculat com a
+            <strong>{{ current_device.alias }}</strong>
+            (des de {{ current_device.enrolled_at.strftime('%d/%m/%Y') }}).
+        </p>
+        <form method="POST" action="/admin/kiosk/unenroll-self">
+            {% include "_csrf.html" %}
+            <button type="submit"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">
+                Esborrar cookie d'aquest navegador
+            </button>
+        </form>
+        {% else %}
+        <p class="text-gray-600 mb-3">
+            Obre aquesta pàgina <strong>des de la tablet</strong> que vols
+            matricular i fes clic al botó. S'instal·larà una cookie llarga
+            (5 anys) que identificarà el dispositiu com a quiosc autoritzat,
+            independentment de la xarxa WiFi o la IP que tingui.
+        </p>
+        <form method="POST" action="/admin/kiosk/enroll" class="space-y-3">
+            {% include "_csrf.html" %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Nom identificatiu
+                </label>
+                <input type="text" name="alias" required maxlength="200"
+                       placeholder="Ex: Tablet recepció principal"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Notes (opcional)
+                </label>
+                <input type="text" name="notes" maxlength="1000"
+                       placeholder="Ex: Samsung Tab A8 - oficina Coromina"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold">
+                Matricular aquest dispositiu
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Resum -->
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Resum</h2>
+        {% set active_count = devices|selectattr('revoked_at', 'none')|list|length %}
+        <dl class="space-y-2 text-sm">
+            <div class="flex justify-between">
+                <dt class="text-gray-500">Actius:</dt>
+                <dd class="font-medium text-green-700">{{ active_count }}</dd>
+            </div>
+            <div class="flex justify-between">
+                <dt class="text-gray-500">Revocats:</dt>
+                <dd class="font-medium text-gray-500">{{ devices|length - active_count }}</dd>
+            </div>
+        </dl>
+        <p class="text-xs text-gray-500 mt-3">
+            Si una tablet es perd o es treu de servei, revoca-la des de la
+            llista — la cookie deixarà de tenir efecte immediatament.
+        </p>
+    </div>
+</div>
+
+<!-- Llistat -->
+<div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-800">Dispositius</h2>
+    </div>
+    {% if devices %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Matriculat</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última activitat</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última IP</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estat</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Accions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for d in devices %}
+                <tr class="{% if d.revoked_at %}bg-gray-50 text-gray-400{% endif %}">
+                    <td class="px-6 py-3 text-sm font-medium">
+                        {{ d.alias }}
+                        {% if current_device and current_device.id == d.id %}
+                        <span class="ml-1 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">aquest dispositiu</span>
+                        {% endif %}
+                        {% if d.notes %}
+                        <div class="text-xs text-gray-500 mt-0.5">{{ d.notes }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-3 text-sm">
+                        {{ d.enrolled_at.strftime('%d/%m/%Y') }}
+                        {% if d.enrolled_by %}
+                        <div class="text-xs text-gray-500">per {{ d.enrolled_by.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-3 text-sm">
+                        {% if d.last_seen_at %}
+                            {{ d.last_seen_at.strftime('%d/%m/%Y %H:%M') }}
+                        {% else %}
+                            <span class="text-gray-400 italic">mai</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-3 text-sm font-mono">
+                        {{ d.last_seen_ip or '—' }}
+                    </td>
+                    <td class="px-6 py-3 text-sm">
+                        {% if d.revoked_at %}
+                            <span class="text-red-600">Revocat</span>
+                            <div class="text-xs text-gray-500">{{ d.revoked_at.strftime('%d/%m/%Y') }}</div>
+                        {% else %}
+                            <span class="text-green-700">Actiu</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-right">
+                        {% if not d.revoked_at %}
+                        <form method="POST" action="/admin/kiosk/devices/{{ d.id }}/revoke" class="inline"
+                              onsubmit="return confirm('Revocar {{ d.alias }}? Aquesta tablet deixarà de funcionar com a quiosc.');">
+                            {% include "_csrf.html" %}
+                            <button type="submit" class="text-red-600 hover:text-red-800 font-medium">
+                                Revocar
+                            </button>
+                        </form>
+                        {% else %}
+                            <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="px-6 py-8 text-center text-gray-500">
+        Encara no hi ha cap dispositiu matriculat.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

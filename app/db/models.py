@@ -186,6 +186,30 @@ class BlockedVisitor(Base):
     internal_label = Column(String(200))
 
 
+class KioskDevice(Base):
+    """Dispositiu (tablet, ordinador) matriculat com a quiosc.
+
+    Permet identificar dispositius per cookie signada en comptes de per IP
+    — útil quan les tablets es connecten per WiFi i no tenen IP estable.
+    Al servidor només es guarda el SHA-256 del token (com una contrasenya):
+    si la BD es filtra, els tokens originals no es poden reconstruir.
+    """
+    __tablename__ = "kiosk_devices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    alias = Column(String(200), nullable=False)  # ex: "Tablet recepció A"
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    enrolled_by_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"))
+    enrolled_by = relationship("AdminUser", foreign_keys=[enrolled_by_id])
+    enrolled_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_seen_at = Column(DateTime(timezone=True))
+    last_seen_ip = Column(INET)
+    revoked_at = Column(DateTime(timezone=True))
+    revoked_by_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"))
+    revoked_by = relationship("AdminUser", foreign_keys=[revoked_by_id])
+    notes = Column(Text)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
