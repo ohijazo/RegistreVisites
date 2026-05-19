@@ -1192,6 +1192,85 @@ async def profile_save(
     return RedirectResponse("/admin/profile?saved=1", status_code=302)
 
 
+@router.post("/profile/change-password")
+@limiter.limit("5/minute")
+async def profile_change_password(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    """Canvi de contrasenya del propi usuari autenticat. Verifica la
+    contrasenya actual i invalida les altres sessions un cop canviada."""
+    # Verificar contrasenya actual
+    if not verify_password(current_password, admin.password_hash):
+        db.add(AuditLog(
+            admin_id=admin.id,
+            action="password_change_failed",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({"reason": "wrong_current"}),
+        ))
+        await db.commit()
+        return RedirectResponse(
+            "/admin/profile?pw_error=current_wrong",
+            status_code=302,
+        )
+
+    # Validar nova contrasenya
+    if len(new_password) < MIN_ADMIN_PASSWORD_LEN:
+        return RedirectResponse(
+            "/admin/profile?pw_error=too_short",
+            status_code=302,
+        )
+    if new_password != confirm_password:
+        return RedirectResponse(
+            "/admin/profile?pw_error=mismatch",
+            status_code=302,
+        )
+    if verify_password(new_password, admin.password_hash):
+        return RedirectResponse(
+            "/admin/profile?pw_error=same_as_current",
+            status_code=302,
+        )
+
+    # Actualitzar i forçar logout de la resta de sessions
+    admin.password_hash = hash_password(new_password)
+    admin.last_logout_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        admin_id=admin.id,
+        action="password_change_self",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({}),
+    ))
+    await db.commit()
+
+    # Renovar la cookie JWT del propi navegador perquè la sessió actual no
+    # quedi invalidada pel last_logout_at que acabem d'avançar.
+    now_utc = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": str(admin.id),
+            "iat": int(now_utc.timestamp()),
+            "exp": now_utc + timedelta(hours=settings.SESSION_HOURS),
+        },
+        settings.JWT_SECRET_KEY,
+        algorithm="HS256",
+    )
+    response = RedirectResponse("/admin/profile?pw_saved=1", status_code=302)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="strict",
+        secure=settings.BASE_URL.startswith("https://"),
+        max_age=settings.SESSION_HOURS * 3600,
+        path="/",
+    )
+    return response
+
+
 # ── Dashboard de salut del sistema ─────────────────────────
 
 @router.get("/health-status", response_class=HTMLResponse)

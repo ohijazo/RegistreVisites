@@ -12,6 +12,30 @@
     </div>
     {% endif %}
 
+    {% set pw_saved = request.query_params.get('pw_saved') %}
+    {% set pw_error = request.query_params.get('pw_error') %}
+    {% if pw_saved %}
+    <div class="bg-green-50 border border-green-300 text-green-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        Contrasenya canviada correctament. Les altres sessions han estat tancades.
+    </div>
+    {% elif pw_error == 'current_wrong' %}
+    <div class="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        La contrasenya actual no és correcta.
+    </div>
+    {% elif pw_error == 'too_short' %}
+    <div class="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        La nova contrasenya ha de tenir com a mínim 12 caràcters.
+    </div>
+    {% elif pw_error == 'mismatch' %}
+    <div class="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        La nova contrasenya i la confirmació no coincideixen.
+    </div>
+    {% elif pw_error == 'same_as_current' %}
+    <div class="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm">
+        La nova contrasenya ha de ser diferent de l'actual.
+    </div>
+    {% endif %}
+
     <div class="bg-white rounded-xl shadow-sm p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-gray-100">
             <div>
@@ -62,6 +86,50 @@
                 <button type="submit"
                         class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
                     Desar canvis
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Canvi de contrasenya -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mt-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Canviar la contrasenya</h2>
+        <p class="text-xs text-gray-600 mb-4">
+            En canviar-la, es tanca la sessió de la resta de dispositius on
+            tinguis l'usuari obert. La sessió d'aquest navegador es manté.
+        </p>
+        <form method="POST" action="/admin/profile/change-password" autocomplete="off">
+            {% include "_csrf.html" %}
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">
+                    Contrasenya actual
+                </label>
+                <input type="password" name="current_password" required autocomplete="current-password"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">
+                    Nova contrasenya
+                </label>
+                <input type="password" name="new_password" required minlength="12" autocomplete="new-password"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <p class="text-xs text-gray-500 mt-1">Mínim 12 caràcters.</p>
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-semibold text-gray-700 mb-1">
+                    Confirma la nova contrasenya
+                </label>
+                <input type="password" name="confirm_password" required minlength="12" autocomplete="new-password"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div class="flex justify-end gap-2 mt-4">
+                <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
+                    Canviar contrasenya
                 </button>
             </div>
         </form>
