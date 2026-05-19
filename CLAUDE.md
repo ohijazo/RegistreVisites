@@ -1118,7 +1118,7 @@ sudo systemctl status visites
 ### 6. Apache (VirtualHost)
 
 ```bash
-sudo a2enmod proxy proxy_http headers rewrite
+sudo a2enmod proxy proxy_http headers rewrite remoteip
 sudo nano /etc/apache2/sites-available/visites.conf
 ```
 
@@ -1131,6 +1131,13 @@ sudo nano /etc/apache2/sites-available/visites.conf
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "strict-origin"
 
+    # Identificar la IP real del client als logs d'Apache (Apache la rep
+    # com a header X-Forwarded-For del proxy/firewall davant, o és la IP
+    # del client si Apache és el primer node). L'app la rep igualment via
+    # X-Forwarded-For (gestionada per ProxyHeadersMiddleware al backend).
+    RemoteIPHeader X-Forwarded-For
+    LogFormat "%a %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" remoteip_combined
+
     # Fitxers estàtics servits directament per Apache
     Alias /static/ /var/www/visites/static/
     <Directory /var/www/visites/static/>
@@ -1140,16 +1147,24 @@ sudo nano /etc/apache2/sites-available/visites.conf
         ExpiresDefault "access plus 30 days"
     </Directory>
 
-    # Reverse proxy a Gunicorn
+    # Reverse proxy a Gunicorn. ProxyPass posa automàticament el header
+    # X-Forwarded-For amb la IP real del client; el backend hi confia
+    # només si arriba de 127.0.0.1 (vegeu TRUSTED_PROXIES al .env).
     ProxyPreserveHost On
     ProxyPass /static/ !
     ProxyPass        / http://127.0.0.1:50003/
     ProxyPassReverse / http://127.0.0.1:50003/
 
     ErrorLog  ${APACHE_LOG_DIR}/visites-error.log
-    CustomLog ${APACHE_LOG_DIR}/visites-access.log combined
+    CustomLog ${APACHE_LOG_DIR}/visites-access.log remoteip_combined
 </VirtualHost>
 ```
+
+**Nota sobre `KIOSK_IP_ALLOWLIST`**: les IPs configurades aquí són les
+**reals dels dispositius de recepció** (tablet, PC del recepcionista). Gràcies
+al `ProxyHeadersMiddleware` configurat a `app/main.py`, el backend rep la IP
+real del client via `X-Forwarded-For`. Si la deixes a `127.0.0.1` per error,
+es tractaria qualsevol visitant com a quiosc i es perdria la protecció.
 
 ```bash
 sudo a2ensite visites.conf

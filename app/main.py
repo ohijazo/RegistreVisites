@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -56,6 +57,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Reverse proxy: confiem en X-Forwarded-For només de les IPs configurades.
+# Apache (a 127.0.0.1) hi posa la IP real del client, així podem aplicar
+# correctament KIOSK_IP_ALLOWLIST i el rate limiting per IP real.
+app.add_middleware(
+    ProxyHeadersMiddleware,
+    trusted_hosts=settings.TRUSTED_PROXIES or "127.0.0.1",
+)
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):

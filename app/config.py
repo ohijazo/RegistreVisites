@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     KIOSK_SHARED_SECRET: str = ""
     KIOSK_IP_ALLOWLIST: str = ""
 
+    # IPs (CSV) que confiem com a reverse proxy: l'app llegirà X-Forwarded-For
+    # només si la petició ve d'una d'aquestes IPs. En producció, Apache fa
+    # de reverse proxy a 127.0.0.1, així que aquest és el valor per defecte.
+    TRUSTED_PROXIES: str = "127.0.0.1"
+
     SESSION_HOURS: int = 8
     EXIT_TOKEN_HOURS: int = 8
     KIOSK_RESET_SECONDS: int = 60
