@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, String, Boolean, Date, DateTime, Text, Time,
+    Column, String, Boolean, Date, DateTime, Float, Text, Time,
     ForeignKey, LargeBinary, Integer,
 )
 from sqlalchemy.dialects.postgresql import UUID, INET
@@ -81,6 +81,9 @@ class Visit(Base):
     legal_document = relationship("LegalDocument", back_populates="visits")
     accepted_at = Column(DateTime(timezone=True))
     signature = Column(LargeBinary)  # PNG de la signatura manuscrita
+    signature_lat = Column(Float)            # latitud GPS al moment de signar
+    signature_lon = Column(Float)            # longitud GPS al moment de signar
+    signature_accuracy_m = Column(Float)     # precisió en metres reportada pel navegador
 
     # Metadades
     ip_address = Column(INET)
