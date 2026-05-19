@@ -4,6 +4,18 @@
 {% block title %}{{ t('legal_title') }}{% endblock %}
 
 {% block body %}
+<style>
+    #legal-text h3 { font-size: 1.05rem; font-weight: 600; color: #1f2937; margin: 1rem 0 0.5rem; }
+    #legal-text h3:first-child { margin-top: 0; }
+    #legal-text p { margin: 0.5rem 0; line-height: 1.55; }
+    #legal-text ul, #legal-text ol { margin: 0.5rem 0 0.75rem 1.25rem; padding-left: 0.5rem; }
+    #legal-text ul { list-style: disc; }
+    #legal-text ol { list-style: decimal; }
+    #legal-text li { margin: 0.25rem 0; line-height: 1.5; }
+    #legal-text strong { font-weight: 600; color: #111827; }
+    #legal-text em { font-style: italic; }
+    #legal-text a { color: #2563eb; text-decoration: underline; }
+</style>
 <div class="max-w-2xl mx-auto px-4 py-6">
     <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">{{ t('legal_title') }}</h1>
 
@@ -59,7 +71,11 @@
                 </button>
             </div>
             <p class="text-xs text-gray-500 mt-1">{{ t('legal_signature_hint') }}</p>
+            <p id="geo-status" class="text-xs text-gray-400 mt-1"></p>
             <input type="hidden" name="signature" id="signature-data">
+            <input type="hidden" name="signature_lat" id="signature-lat">
+            <input type="hidden" name="signature_lon" id="signature-lon">
+            <input type="hidden" name="signature_accuracy_m" id="signature-acc">
         </div>
 
         <div class="flex gap-3">
@@ -99,7 +115,35 @@ window.addEventListener('load', function() {
     if (el.scrollHeight <= el.clientHeight) {
         enableCheckboxes();
     }
+    requestGeolocation();
 });
+
+// ── Geolocalització de la signatura ──
+function requestGeolocation() {
+    var status = document.getElementById('geo-status');
+    if (!navigator.geolocation) {
+        if (status) status.textContent = '⚠ El dispositiu no permet la geolocalització.';
+        return;
+    }
+    if (status) status.textContent = '📍 Sol·licitant ubicació…';
+    navigator.geolocation.getCurrentPosition(
+        function(pos) {
+            document.getElementById('signature-lat').value = pos.coords.latitude.toFixed(7);
+            document.getElementById('signature-lon').value = pos.coords.longitude.toFixed(7);
+            document.getElementById('signature-acc').value = Math.round(pos.coords.accuracy);
+            if (status) status.textContent = '📍 Ubicació registrada (precisió ±' + Math.round(pos.coords.accuracy) + ' m).';
+        },
+        function(err) {
+            if (status) {
+                if (err.code === 1) status.textContent = '⚠ Permís d\'ubicació denegat.';
+                else if (err.code === 2) status.textContent = '⚠ Ubicació no disponible.';
+                else if (err.code === 3) status.textContent = '⚠ Temps esgotat sol·licitant ubicació.';
+                else status.textContent = '⚠ No s\'ha pogut obtenir l\'ubicació.';
+            }
+        },
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
+    );
+}
 
 // ── Checkboxes → mostrar signatura ──
 var hasSigned = false;

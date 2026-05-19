@@ -575,7 +575,24 @@ async def submit_legal(
     check_rules: str = Form(None),
     check_rgpd: str = Form(None),
     signature: str = Form(None),
+    signature_lat: str = Form(None),
+    signature_lon: str = Form(None),
+    signature_accuracy_m: str = Form(None),
 ):
+    def _parse_float(s):
+        try:
+            return float(s) if s not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    sig_lat = _parse_float(signature_lat)
+    sig_lon = _parse_float(signature_lon)
+    sig_acc = _parse_float(signature_accuracy_m)
+    # Sanity check: latituds/longituds fora de rang són descartades
+    if sig_lat is not None and not (-90.0 <= sig_lat <= 90.0):
+        sig_lat = None
+    if sig_lon is not None and not (-180.0 <= sig_lon <= 180.0):
+        sig_lon = None
     if lang not in SUPPORTED_LANGS:
         return RedirectResponse("/ca/", status_code=302)
 
@@ -683,6 +700,9 @@ async def submit_legal(
         legal_document_id=legal_doc.id if legal_doc else None,
         accepted_at=datetime.now(timezone.utc),
         signature=signature_bytes,
+        signature_lat=sig_lat,
+        signature_lon=sig_lon,
+        signature_accuracy_m=sig_acc,
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         exit_token=exit_token,

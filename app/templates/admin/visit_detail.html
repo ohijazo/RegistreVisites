@@ -160,6 +160,26 @@
                 </dd>
             </div>
             {% endif %}
+            {% if visit.signature_lat is not none and visit.signature_lon is not none %}
+            <div class="flex justify-between">
+                <dt class="text-gray-500">Ubicació GPS:</dt>
+                <dd class="font-medium text-gray-800 text-right">
+                    <a href="https://www.google.com/maps?q={{ visit.signature_lat }},{{ visit.signature_lon }}"
+                       target="_blank" rel="noopener"
+                       class="text-blue-600 hover:underline">
+                        {{ "%.6f"|format(visit.signature_lat) }}, {{ "%.6f"|format(visit.signature_lon) }}
+                    </a>
+                    {% if visit.signature_accuracy_m %}
+                    <div class="text-xs text-gray-500">±{{ visit.signature_accuracy_m|int }} m</div>
+                    {% endif %}
+                </dd>
+            </div>
+            {% else %}
+            <div class="flex justify-between">
+                <dt class="text-gray-500">Ubicació GPS:</dt>
+                <dd class="font-medium text-gray-400 italic">no disponible</dd>
+            </div>
+            {% endif %}
         </dl>
     </div>
 
