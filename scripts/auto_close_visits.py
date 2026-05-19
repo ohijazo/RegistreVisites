@@ -9,7 +9,7 @@ l'historial conservi la diferència respecte d'un checkout normal.
     # Configurable: AUTO_CLOSE_AFTER_HOURS al .env (per defecte 12 h)
 
 Cron suggerit (a /etc/cron.d/visites o crontab de www-data):
-    55 23 * * * /opt/visites/venv/bin/python /opt/visites/scripts/auto_close_visits.py >> /var/log/visites/auto_close.log 2>&1
+    55 23 * * * /var/www/visites/venv/bin/python /var/www/visites/scripts/auto_close_visits.py >> /var/log/visites/auto_close.log 2>&1
 """
 import asyncio
 import json
