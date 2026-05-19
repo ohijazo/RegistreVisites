@@ -261,7 +261,7 @@ async def login_submit(
         httponly=True,
         samesite="strict",
         max_age=settings.SESSION_HOURS * 3600,
-        secure=settings.ENV == "production",
+        secure=settings.BASE_URL.startswith("https://"),
     )
     return response
 
