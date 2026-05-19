@@ -1,9 +1,15 @@
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
+
+# Afegir l'arrel del projecte al sys.path perquè 'app' sigui importable
+# quan alembic s'executa des de qualsevol directori.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings
 from app.db.database import Base
