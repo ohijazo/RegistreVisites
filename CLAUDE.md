@@ -10,8 +10,8 @@ Aplicació web en Python per digitalitzar el registre d'entrada i sortida de vis
 
 - **Servidor**: Ubuntu (amb altres apps Python en producció)
 - **Base de dades**: PostgreSQL ja instal·lat i en ús per altres aplicacions
-- **Servidor web**: Nginx ja instal·lat com a reverse proxy
-- **Patró de desplegament**: Cada app Python corre com a servei systemd darrere de Nginx
+- **Servidor web**: Apache 2.4 ja instal·lat com a reverse proxy (amb mòduls `proxy`, `proxy_http`, `rewrite`)
+- **Patró de desplegament**: Cada app Python corre com a servei systemd darrere d'Apache, codi sota `/var/www/<nom-app>/`, propietari `www-data`, logs a `/var/log/<nom-app>/`. Apps de referència ja desplegades: `fitxes-tecniques` (port 50002, DNS `fitxesfc.agrienergia.local`) i `comandes-venda` (port 5000)
 
 La nova app s'integra seguint exactament el mateix patró. **No trencar res del que ja existeix.**
 
@@ -996,8 +996,8 @@ async def get_current_admin(
 
 - **CSRF**: FastAPI no inclou protecció CSRF per defecte. Afegir token CSRF als formularis HTML. Usar la llibreria `itsdangerous` o implementar-ho manualment amb un camp hidden + validació al POST.
 - **Rate limiting**: Limitar el POST `/register` a màxim 10 peticions per IP per minut per evitar abús. Usar `slowapi` (wrapper de `limits` per FastAPI).
-- **Headers de seguretat**: Configurar a Nginx: `X-Frame-Options DENY`, `X-Content-Type-Options nosniff`, `Content-Security-Policy`.
-- **DNI en logs**: Assegurar-se que el DNI (ni xifrat ni en clar) apareix als logs d'accés de Nginx. Excloure el cos del POST dels logs.
+- **Headers de seguretat**: Configurar a Apache (via `mod_headers`): `X-Frame-Options DENY`, `X-Content-Type-Options nosniff`, `Content-Security-Policy`.
+- **DNI en logs**: Assegurar-se que el DNI (ni xifrat ni en clar) NO apareix als logs d'accés d'Apache. El `combined` format ja no inclou el cos del POST per defecte.
 - **Connexions BD**: Usar connexió SSL a PostgreSQL si és possible, tot i que sigui localhost.
 - **Contrasenyes admin**: Mínim 12 caràcters, hash bcrypt amb cost factor 12.
 
@@ -1005,43 +1005,85 @@ async def get_current_admin(
 
 ## Desplegament al servidor Ubuntu
 
-### 1. Preparar entorn
+> **Convencions seguides**: idèntiques a `fitxes-tecniques` i `comandes-venda` ja desplegades al servidor.
+>
+> | Paràmetre | Valor |
+> |---|---|
+> | Directori | `/var/www/visites/` |
+> | Usuari del servei | `www-data` |
+> | Port backend | `50003` (només localhost, darrere Apache) |
+> | Servei systemd | `visites.service` |
+> | Logs de l'app | `/var/log/visites/` |
+> | DNS intern | `visitesfc.agrienergia.local` |
+> | Base de dades | `visites_db` (usuari `visites_user`) |
+
+### 1. Clonar el repositori
 
 ```bash
-sudo mkdir -p /opt/visites /var/log/visites
-sudo chown www-data:www-data /var/log/visites
+cd /var/www
+sudo git clone https://github.com/ohijazo/RegistreVisites.git visites
+sudo chown -R www-data:www-data /var/www/visites
 
-cd /opt/visites
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+sudo mkdir -p /var/log/visites
+sudo chown www-data:www-data /var/log/visites
 ```
 
-### 2. Base de dades
+### 2. Entorn virtual i dependències
 
 ```bash
-# Connectar com a superusuari PostgreSQL
-sudo -u postgres psql <<EOF
-CREATE USER visites_user WITH PASSWORD 'PASSWORD_SEGURA';
-CREATE DATABASE visites_db OWNER visites_user;
-GRANT ALL PRIVILEGES ON DATABASE visites_db TO visites_user;
-EOF
+cd /var/www/visites
+sudo -u www-data python3 -m venv venv
+sudo -u www-data venv/bin/pip install --upgrade pip
+sudo -u www-data venv/bin/pip install -r requirements.txt
+sudo -u www-data venv/bin/pip install gunicorn
+```
 
-# Executar migracions
-cd /opt/visites && source venv/bin/activate
-alembic upgrade head
+### 3. Fitxer .env
+
+```bash
+sudo -u www-data cp /var/www/visites/.env.example /var/www/visites/.env
+sudo nano /var/www/visites/.env   # omplir DATABASE_URL, ENCRYPTION_KEY, SECRET_KEY, etc.
+sudo chmod 600 /var/www/visites/.env
+sudo chown www-data:www-data /var/www/visites/.env
+```
+
+### 4. Base de dades PostgreSQL
+
+```bash
+sudo -u postgres psql <<EOF
+CREATE DATABASE visites_db;
+CREATE USER visites_user WITH PASSWORD 'PASSWORD_SEGURA';
+GRANT ALL PRIVILEGES ON DATABASE visites_db TO visites_user;
+
+\c visites_db
+ALTER DATABASE visites_db OWNER TO visites_user;
+ALTER SCHEMA public OWNER TO visites_user;
+GRANT ALL ON SCHEMA public TO visites_user;
+GRANT CREATE ON SCHEMA public TO visites_user;
+\q
+EOF
+```
+
+> **IMPORTANT** (igual que a `fitxes-tecniques`): a PostgreSQL 15+ l'esquema `public` no és escrivible per defecte tot i tenir `ALL PRIVILEGES`. Cal canviar el propietari i donar `CREATE`. Si no, `alembic upgrade head` fallarà amb `permission denied for schema public`.
+>
+> **Contrasenya BD**: evitar caràcters que trenquen la URL (`#`, `@`, `:`, `/`, `?`, `;`, espais). Si calen, codificar-los (`@`→`%40`, etc.).
+
+```bash
+# Executar migracions (env.py ja afegeix la carpeta al sys.path)
+cd /var/www/visites
+sudo -u www-data venv/bin/alembic upgrade head
 
 # Crear primer admin
-python scripts/create_admin.py --email admin@empresa.com
+sudo -u www-data venv/bin/python scripts/create_admin.py --email admin@agrienergia.com
 ```
 
-### 3. Servei systemd
+### 5. Servei systemd
 
 Fitxer: `/etc/systemd/system/visites.service`
 
 ```ini
 [Unit]
-Description=Registre de Visites
+Description=Registre de Visites - Backend
 After=network.target postgresql.service
 Requires=postgresql.service
 
@@ -1049,17 +1091,17 @@ Requires=postgresql.service
 Type=exec
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/visites
-EnvironmentFile=/opt/visites/.env
-ExecStart=/opt/visites/venv/bin/gunicorn app.main:app \
+WorkingDirectory=/var/www/visites
+EnvironmentFile=/var/www/visites/.env
+ExecStart=/var/www/visites/venv/bin/gunicorn app.main:app \
     --workers 2 \
     --worker-class uvicorn.workers.UvicornWorker \
-    --bind 127.0.0.1:8001 \
+    --bind 127.0.0.1:50003 \
     --timeout 30 \
     --access-logfile /var/log/visites/access.log \
     --error-logfile /var/log/visites/error.log
 ExecReload=/bin/kill -s HUP $MAINPID
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]
@@ -1073,53 +1115,98 @@ sudo systemctl start visites
 sudo systemctl status visites
 ```
 
-### 4. Nginx
+### 6. Apache (VirtualHost)
 
-Afegir al fitxer de configuració Nginx existent (o nou fitxer a `sites-available`):
+```bash
+sudo a2enmod proxy proxy_http headers rewrite
+sudo nano /etc/apache2/sites-available/visites.conf
+```
 
-```nginx
-server {
-    listen 80;
-    server_name visites.empresa.local;  # o IP interna
-
-    # Logs sense capturar cos del POST (per no guardar DNI)
-    access_log /var/log/nginx/visites_access.log;
-    error_log  /var/log/nginx/visites_error.log;
+```apache
+<VirtualHost *:80>
+    ServerName visitesfc.agrienergia.local
 
     # Headers de seguretat
-    add_header X-Frame-Options "DENY";
-    add_header X-Content-Type-Options "nosniff";
-    add_header Referrer-Policy "strict-origin";
+    Header always set X-Frame-Options "DENY"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin"
 
-    location /static/ {
-        alias /opt/visites/static/;
-        expires 30d;
-    }
+    # Fitxers estàtics servits directament per Apache
+    Alias /static/ /var/www/visites/static/
+    <Directory /var/www/visites/static/>
+        Require all granted
+        Options -Indexes
+        ExpiresActive On
+        ExpiresDefault "access plus 30 days"
+    </Directory>
 
-    location / {
-        proxy_pass         http://127.0.0.1:8001;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_read_timeout 30;
-    }
-}
+    # Reverse proxy a Gunicorn
+    ProxyPreserveHost On
+    ProxyPass /static/ !
+    ProxyPass        / http://127.0.0.1:50003/
+    ProxyPassReverse / http://127.0.0.1:50003/
+
+    ErrorLog  ${APACHE_LOG_DIR}/visites-error.log
+    CustomLog ${APACHE_LOG_DIR}/visites-access.log combined
+</VirtualHost>
 ```
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
+sudo a2ensite visites.conf
+sudo apache2ctl configtest
+sudo systemctl reload apache2
 ```
 
-### 5. Cron per a neteja automàtica de dades (RGPD)
+DNS intern: afegir un registre A `visitesfc.agrienergia.local` → IP del servidor.
+
+### 7. Cron per a neteja automàtica de dades (RGPD)
 
 ```bash
 # Afegir al crontab de www-data
 sudo crontab -u www-data -e
 
 # Executar cada nit a les 3:00
-0 3 * * * /opt/visites/venv/bin/python /opt/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
+0 3 * * * /var/www/visites/venv/bin/python /var/www/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
+```
+
+### 8. Rotació de logs
+
+```bash
+sudo nano /etc/logrotate.d/visites
+```
+
+```
+/var/log/visites/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+}
+```
+
+### Comandes útils del servei
+
+| Comanda | Acció |
+|---|---|
+| `sudo systemctl start visites` | Arrencar |
+| `sudo systemctl stop visites` | Aturar |
+| `sudo systemctl restart visites` | Reiniciar |
+| `sudo systemctl status visites` | Estat |
+| `sudo journalctl -u visites -f` | Logs en temps real |
+| `tail -f /var/log/visites/error.log` | Errors de Gunicorn |
+| `tail -f /var/log/apache2/visites-error.log` | Errors d'Apache |
+
+### Actualitzar l'aplicació
+
+```bash
+cd /var/www/visites
+sudo -u www-data git pull
+sudo -u www-data venv/bin/pip install -r requirements.txt
+sudo -u www-data venv/bin/alembic upgrade head
+sudo systemctl restart visites
 ```
 
 ---
@@ -1223,12 +1310,8 @@ app.add_middleware(
 
 ## Preguntes obertes (a respondre abans de començar)
 
-- [ ] Quina versió d'Ubuntu? (per confirmar versions de Python disponibles)
-- [ ] Les apps Python existents usen FastAPI, Django o Flask? (per seguir el mateix patró)
-- [ ] Nginx: teniu `sites-available` / `sites-enabled` o un fitxer `nginx.conf` monolític?
 - [ ] La tablet és Android o iPad? (afecta les instruccions de mode quiosc)
 - [ ] Cal notificació per email al departament quan arriba el visitant? (Fase 2 o MVP?)
 - [ ] Quants departaments hi ha? (per la migració inicial de dades)
 - [ ] Teniu servidor SMTP intern o useu un servei extern (SendGrid, etc.)?
 - [ ] Cal HTTPS al servidor intern? (si la tablet es connecta per WiFi, HTTP és suficient a xarxa local)
-- [ ] Nom de domini o IP interna per a l'aplicació? (per configurar Nginx i les URLs dels QR)

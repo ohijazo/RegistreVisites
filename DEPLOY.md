@@ -1,50 +1,69 @@
 # Guia de desplegament — Registre de Visites
 
+> Segueix la mateixa convenció que `fitxes-tecniques` i `comandes-venda`: codi a `/var/www/<app>/`, propietari `www-data`, Apache com a reverse proxy, port backend `50003`, DNS `visitesfc.agrienergia.local`.
+
 ## Requisits del servidor
 
 - Ubuntu 22.04+
 - Python 3.11+
 - PostgreSQL 14+
-- Nginx
+- Apache 2.4+ (amb mòduls `proxy`, `proxy_http`, `headers`, `rewrite`, `expires`)
 
 ## 1. Preparar el sistema
 
 ```bash
-sudo apt update && sudo apt install -y python3 python3-venv python3-pip postgresql nginx
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip postgresql apache2 git
+sudo a2enmod proxy proxy_http headers rewrite expires
 ```
 
 ## 2. Crear base de dades
 
 ```bash
 sudo -u postgres psql <<EOF
+CREATE DATABASE visites_db;
 CREATE USER visites_user WITH PASSWORD 'CONTRASENYA_SEGURA';
-CREATE DATABASE visites_db OWNER visites_user;
 GRANT ALL PRIVILEGES ON DATABASE visites_db TO visites_user;
+
+\c visites_db
+ALTER DATABASE visites_db OWNER TO visites_user;
+ALTER SCHEMA public OWNER TO visites_user;
+GRANT ALL ON SCHEMA public TO visites_user;
+GRANT CREATE ON SCHEMA public TO visites_user;
 EOF
 ```
+
+> **IMPORTANT** (PostgreSQL 15+): l'esquema `public` no és escrivible per defecte tot i tenir `ALL PRIVILEGES`. Cal canviar-ne el propietari i donar `CREATE`. Si no, `alembic upgrade head` fallarà amb `permission denied for schema public`.
+>
+> **Contrasenya BD**: evitar caràcters que trenquen URLs (`@`, `:`, `/`, `?`, `#`, `;`). Si calen, codificar-los (`@`→`%40`, etc.).
 
 ## 3. Descarregar l'aplicació
 
 ```bash
-sudo mkdir -p /opt/visites
-sudo chown $USER:$USER /opt/visites
-cd /opt/visites
-git clone https://github.com/ohijazo/RegistreVisites.git .
+cd /var/www
+sudo git clone https://github.com/ohijazo/RegistreVisites.git visites
+sudo chown -R www-data:www-data /var/www/visites
+
+sudo mkdir -p /var/log/visites
+sudo chown www-data:www-data /var/log/visites
 ```
 
 ## 4. Entorn virtual i dependències
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+cd /var/www/visites
+sudo -u www-data python3 -m venv venv
+sudo -u www-data venv/bin/pip install --upgrade pip
+sudo -u www-data venv/bin/pip install -r requirements.txt
+sudo -u www-data venv/bin/pip install gunicorn
 ```
 
 ## 5. Configurar .env
 
 ```bash
-cp .env.example .env
-nano .env
+sudo -u www-data cp .env.example .env
+sudo nano .env
+sudo chmod 600 .env
+sudo chown www-data:www-data .env
 ```
 
 **Camps obligatoris a configurar:**
@@ -62,7 +81,7 @@ SECRET_KEY=SECRET_GENERAT
 COMPANY_NAME=Farinera Coromina - Grup AE 1897
 COMPANY_ADDRESS=Adreça de l'empresa
 COMPANY_EMAIL=dpo@farineracoromina.com
-BASE_URL=http://IP_O_DOMINI_INTERN
+BASE_URL=http://visitesfc.agrienergia.local
 
 ENV=production
 DEBUG=false
@@ -71,20 +90,20 @@ DEBUG=false
 ## 6. Executar migracions
 
 ```bash
-source venv/bin/activate
-alembic upgrade head
+cd /var/www/visites
+sudo -u www-data venv/bin/alembic upgrade head
 ```
 
 ## 7. Crear primer admin
 
 ```bash
-python scripts/create_admin.py --email admin@farineracoromina.com --name "Administrador"
+sudo -u www-data venv/bin/python scripts/create_admin.py --email admin@farineracoromina.com --name "Administrador"
 ```
 
 ## 8. Crear dades inicials
 
 ```bash
-python scripts/seed_legal_doc.py
+sudo -u www-data venv/bin/python scripts/seed_legal_doc.py
 ```
 
 ## 9. Configurar servei systemd
@@ -92,7 +111,7 @@ python scripts/seed_legal_doc.py
 ```bash
 sudo tee /etc/systemd/system/visites.service > /dev/null <<EOF
 [Unit]
-Description=Registre de Visites
+Description=Registre de Visites - Backend
 After=network.target postgresql.service
 Requires=postgresql.service
 
@@ -100,17 +119,17 @@ Requires=postgresql.service
 Type=exec
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/visites
-EnvironmentFile=/opt/visites/.env
-ExecStart=/opt/visites/venv/bin/gunicorn app.main:app \\
+WorkingDirectory=/var/www/visites
+EnvironmentFile=/var/www/visites/.env
+ExecStart=/var/www/visites/venv/bin/gunicorn app.main:app \\
     --workers 2 \\
     --worker-class uvicorn.workers.UvicornWorker \\
-    --bind 127.0.0.1:8001 \\
+    --bind 127.0.0.1:50003 \\
     --timeout 30 \\
     --access-logfile /var/log/visites/access.log \\
     --error-logfile /var/log/visites/error.log
 ExecReload=/bin/kill -s HUP \$MAINPID
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]
@@ -119,51 +138,49 @@ EOF
 ```
 
 ```bash
-sudo mkdir -p /var/log/visites
-sudo chown www-data:www-data /var/log/visites
-sudo chown -R www-data:www-data /opt/visites
-
 sudo systemctl daemon-reload
 sudo systemctl enable visites
 sudo systemctl start visites
 sudo systemctl status visites
 ```
 
-## 10. Configurar Nginx
+## 10. Configurar Apache (VirtualHost)
 
 ```bash
-sudo tee /etc/nginx/sites-available/visites > /dev/null <<EOF
-server {
-    listen 80;
-    server_name visites.farineracoromina.local;
+sudo tee /etc/apache2/sites-available/visites.conf > /dev/null <<'EOF'
+<VirtualHost *:80>
+    ServerName visitesfc.agrienergia.local
 
-    access_log /var/log/nginx/visites_access.log;
-    error_log  /var/log/nginx/visites_error.log;
+    Header always set X-Frame-Options        "DENY"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy        "strict-origin"
 
-    add_header X-Frame-Options "DENY";
-    add_header X-Content-Type-Options "nosniff";
-    add_header Referrer-Policy "strict-origin";
+    LimitRequestBody 2097152
 
-    location /static/ {
-        alias /opt/visites/static/;
-        expires 30d;
-    }
+    Alias /static/ /var/www/visites/static/
+    <Directory /var/www/visites/static/>
+        Require all granted
+        Options -Indexes
+        ExpiresActive On
+        ExpiresDefault "access plus 30 days"
+    </Directory>
 
-    location / {
-        proxy_pass         http://127.0.0.1:8001;
-        proxy_set_header   Host              \$host;
-        proxy_set_header   X-Real-IP         \$remote_addr;
-        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 30;
-    }
-}
+    ProxyPreserveHost On
+    ProxyPass        /static/ !
+    ProxyPass        / http://127.0.0.1:50003/
+    ProxyPassReverse / http://127.0.0.1:50003/
+
+    ErrorLog  ${APACHE_LOG_DIR}/visites-error.log
+    CustomLog ${APACHE_LOG_DIR}/visites-access.log combined
+</VirtualHost>
 EOF
 
-sudo ln -sf /etc/nginx/sites-available/visites /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo a2ensite visites.conf
+sudo apache2ctl configtest
+sudo systemctl reload apache2
 ```
+
+DNS intern: afegir un registre A `visitesfc.agrienergia.local` → IP del servidor.
 
 ## 11. Email amb Microsoft 365 — Opció ràpida amb Power Automate
 
@@ -323,10 +340,10 @@ sudo crontab -u www-data -e
 
 # Auto-checkout nocturn: tanca visites obertes >12h amb checkout_method='auto_eod'.
 # Llindar configurable via AUTO_CLOSE_AFTER_HOURS al .env.
-55 23 * * * /opt/visites/venv/bin/python /opt/visites/scripts/auto_close_visits.py >> /var/log/visites/auto_close.log 2>&1
+55 23 * * * /var/www/visites/venv/bin/python /var/www/visites/scripts/auto_close_visits.py >> /var/log/visites/auto_close.log 2>&1
 
 # Neteja RGPD: elimina visites > 2 anys (article 5.1.e).
-0 3 * * * /opt/visites/venv/bin/python /opt/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
+0 3 * * * /var/www/visites/venv/bin/python /var/www/visites/scripts/purge_old_visits.py >> /var/log/visites/purge.log 2>&1
 ```
 
 ## 14. Backup diari de la base de dades
@@ -343,22 +360,21 @@ EOF
 ## 15. Verificar
 
 ```bash
-# Health check
-curl http://localhost:8001/health
+# Health check (directe al backend)
+curl http://localhost:50003/health
 
 # Provar des del navegador
-# http://visites.farineracoromina.local
-# http://visites.farineracoromina.local/admin/login
+# http://visitesfc.agrienergia.local
+# http://visitesfc.agrienergia.local/admin/login
 ```
 
-## 14. Actualitzar l'aplicació
+## 16. Actualitzar l'aplicació
 
 ```bash
-cd /opt/visites
-git pull
-source venv/bin/activate
-pip install -r requirements.txt
-alembic upgrade head
+cd /var/www/visites
+sudo -u www-data git pull
+sudo -u www-data venv/bin/pip install -r requirements.txt
+sudo -u www-data venv/bin/alembic upgrade head
 sudo systemctl restart visites
 ```
 
@@ -366,8 +382,9 @@ sudo systemctl restart visites
 
 | Problema | Solució |
 |---|---|
-| `systemctl status visites` mostra error | Mirar `/var/log/visites/error.log` |
-| Pàgina 503 | Verificar que PostgreSQL funciona: `sudo systemctl status postgresql` |
-| No carrega la pàgina | Verificar Nginx: `sudo nginx -t` |
+| `systemctl status visites` mostra error | Mirar `/var/log/visites/error.log` o `journalctl -u visites -n 50` |
+| Error 502/503 a Apache | Gunicorn caigut: `sudo systemctl restart visites` |
+| Error de BD | `sudo systemctl status postgresql` |
+| No carrega la pàgina | Validar Apache: `sudo apache2ctl configtest` |
 | Error de xifrat | Verificar `ENCRYPTION_KEY` al `.env` |
-| Health check falla | `curl http://localhost:8001/health` |
+| Health check falla | `curl http://localhost:50003/health` |
