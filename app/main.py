@@ -110,7 +110,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 value=cookie,
                 httponly=False,  # llegible des de JS per HTMX/fetch
                 samesite="strict",
-                secure=settings.ENV == "production",
+                secure=settings.BASE_URL.startswith("https://"),
                 max_age=8 * 3600,
                 path="/",
             )
@@ -125,7 +125,7 @@ app.add_middleware(
     session_cookie="visites_session",
     max_age=3600,
     same_site="strict",
-    https_only=settings.ENV == "production",
+    https_only=settings.BASE_URL.startswith("https://"),
 )
 
 # Rate limiting
