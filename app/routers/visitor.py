@@ -14,6 +14,7 @@ from app.db.models import BlockedVisitor, Department, LegalDocument, Visit
 from app.services.crypto import encrypt, hash_id_document, normalize_id_document
 from app.services.expected import auto_link_expected_visit, find_active_expected_by_code
 from app.services.i18n import t, SUPPORTED_LANGS
+from app.services.kiosk import is_kiosk_ip
 from app.services import risk_content
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
@@ -71,9 +72,7 @@ def _is_kiosk_request(request: Request) -> bool:
     no permet aquesta combinació en prod) i en dev passa.
     """
     if settings.KIOSK_IP_ALLOWLIST:
-        allowed = {ip.strip() for ip in settings.KIOSK_IP_ALLOWLIST.split(",") if ip.strip()}
-        client_ip = request.client.host if request.client else ""
-        if client_ip not in allowed:
+        if not is_kiosk_ip(request.client.host if request.client else ""):
             return False
     if settings.KIOSK_SHARED_SECRET:
         provided = request.headers.get("X-Kiosk-Secret", "")

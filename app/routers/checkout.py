@@ -13,6 +13,7 @@ from app.db.database import get_db
 from app.db.models import Visit, AuditLog
 from app.services.crypto import hash_id_document, normalize_id_document
 from app.services.i18n import t, DEFAULT_LANG
+from app.services.kiosk import is_kiosk_ip
 from app.services.rate_limit import limiter
 
 router = APIRouter(prefix="/checkout")
@@ -29,13 +30,10 @@ def _ctx(request: Request, error=None):
 
 
 def _is_kiosk_ip(request: Request) -> bool:
-    """True si la IP del client està a KIOSK_IP_ALLOWLIST. En dev, sense
-    allowlist configurada, es tracta qualsevol client com a quiosc."""
-    if not settings.KIOSK_IP_ALLOWLIST:
-        return settings.ENV != "production"
-    allowed = {ip.strip() for ip in settings.KIOSK_IP_ALLOWLIST.split(",") if ip.strip()}
-    client_ip = request.client.host if request.client else ""
-    return client_ip in allowed
+    """True si la IP del client està a KIOSK_IP_ALLOWLIST. Accepta IPs
+    individuals i rangs CIDR. En dev, sense allowlist configurada,
+    es tracta qualsevol client com a quiosc."""
+    return is_kiosk_ip(request.client.host if request.client else "")
 
 
 async def _audit(
