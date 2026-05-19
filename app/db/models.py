@@ -84,6 +84,8 @@ class Visit(Base):
     signature_lat = Column(Float)            # latitud GPS al moment de signar
     signature_lon = Column(Float)            # longitud GPS al moment de signar
     signature_accuracy_m = Column(Float)     # precisió en metres reportada pel navegador
+    # NULL = registres pre-funcionalitat; True/False = resposta explícita
+    image_consent = Column(Boolean, nullable=True)
 
     # Metadades
     ip_address = Column(INET)

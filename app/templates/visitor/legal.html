@@ -57,6 +57,19 @@
                        class="mt-0.5 h-6 w-6 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
                 <span class="text-gray-700">{{ t('legal_check_rgpd') }}</span>
             </label>
+            <label class="flex items-start gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 border border-transparent" id="label-image">
+                <input type="checkbox" name="check_image" value="1" id="check-image"
+                       disabled
+                       class="mt-0.5 h-6 w-6 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                <span class="text-gray-700">
+                    {{ t('legal_check_image') }}
+                    <a href="https://farineracoromina.com/wp-content/uploads/2026/05/Politica-de-privacidad-%E2%80%93-Uso-de-imagen-y-voz.pdf"
+                       target="_blank" rel="noopener"
+                       class="text-blue-600 underline text-sm block mt-1">
+                        {{ t('legal_image_policy_link') }} ↗
+                    </a>
+                </span>
+            </label>
         </div>
 
         <!-- Signatura manuscrita -->
@@ -105,9 +118,13 @@ function checkScroll() {
 function enableCheckboxes() {
     document.getElementById('check-rules').disabled = false;
     document.getElementById('check-rgpd').disabled = false;
+    var img = document.getElementById('check-image');
+    if (img) img.disabled = false;
     document.getElementById('scroll-hint').style.display = 'none';
     document.getElementById('label-rules').classList.add('border-blue-200', 'bg-blue-50');
     document.getElementById('label-rgpd').classList.add('border-blue-200', 'bg-blue-50');
+    var lblImg = document.getElementById('label-image');
+    if (lblImg) lblImg.classList.add('border-blue-200', 'bg-blue-50');
 }
 
 window.addEventListener('load', function() {

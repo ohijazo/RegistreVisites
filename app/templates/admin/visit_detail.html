@@ -151,6 +151,18 @@
                 <dt class="text-gray-500">IP:</dt>
                 <dd class="font-medium text-gray-800">{{ visit.ip_address or '—' }}</dd>
             </div>
+            <div class="flex justify-between">
+                <dt class="text-gray-500">Imatge i veu:</dt>
+                <dd class="font-medium text-right">
+                    {% if visit.image_consent is none %}
+                        <span class="text-gray-400 italic">no preguntat</span>
+                    {% elif visit.image_consent %}
+                        <span class="text-green-700">AUTORITZA</span>
+                    {% else %}
+                        <span class="text-red-600">NO autoritza</span>
+                    {% endif %}
+                </dd>
+            </div>
             {% if visit.signature %}
             <div class="mt-4">
                 <dt class="text-gray-500 mb-2">Signatura:</dt>

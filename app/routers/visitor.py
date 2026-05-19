@@ -14,6 +14,7 @@ from app.db.models import BlockedVisitor, Department, LegalDocument, Visit
 from app.services.crypto import encrypt, hash_id_document, normalize_id_document
 from app.services.expected import auto_link_expected_visit, find_active_expected_by_code
 from app.services.i18n import t, SUPPORTED_LANGS
+from app.services import risk_content
 from app.services.qr import generate_qr_base64, exit_url
 from app.services.rate_limit import limiter
 
@@ -145,6 +146,29 @@ async def language_page(lang: str, request: Request):
     if lang not in SUPPORTED_LANGS:
         return RedirectResponse("/ca/", status_code=302)
     return templates.TemplateResponse(request, "visitor/language.html", _lang_context(lang))
+
+
+@router.get("/{lang}/risk-notification", response_class=HTMLResponse)
+async def risk_notification_page(lang: str, request: Request):
+    """Pàgina amb els pictogrames de la Notificació de Riscos.
+    Enllaçada des del document legal perquè el visitant pugui consultar
+    les imatges originals del docx mentre llegeix el text."""
+    if lang not in SUPPORTED_LANGS:
+        return RedirectResponse("/ca/risk-notification", status_code=302)
+    ctx = _lang_context(lang)
+    ctx.update({
+        "page_title": risk_content.PAGE_TITLE[lang],
+        "company_header": risk_content.COMPANY_HEADER,
+        "section_risks": risk_content.SECTION_RISKS[lang],
+        "section_measures": risk_content.SECTION_MEASURES[lang],
+        "section_emergency": risk_content.SECTION_EMERGENCY[lang],
+        "risks": risk_content.RISKS,
+        "measures": risk_content.MEASURES,
+        "emergency": risk_content.EMERGENCY,
+        "btn_back": t(lang, "btn_back"),
+        "btn_download": t(lang, "btn_download_doc"),
+    })
+    return templates.TemplateResponse(request, "visitor/risk_notification.html", ctx)
 
 
 @router.get("/{lang}/action", response_class=HTMLResponse)
@@ -574,6 +598,7 @@ async def submit_legal(
     db: AsyncSession = Depends(get_db),
     check_rules: str = Form(None),
     check_rgpd: str = Form(None),
+    check_image: str = Form(None),
     signature: str = Form(None),
     signature_lat: str = Form(None),
     signature_lon: str = Form(None),
@@ -703,6 +728,7 @@ async def submit_legal(
         signature_lat=sig_lat,
         signature_lon=sig_lon,
         signature_accuracy_m=sig_acc,
+        image_consent=bool(check_image),
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         exit_token=exit_token,
