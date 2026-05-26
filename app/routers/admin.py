@@ -2858,7 +2858,9 @@ async def kiosk_devices_list(
     """
     from app.services.kiosk import find_active_device_by_token
     result = await db.execute(
-        select(KioskDevice).order_by(KioskDevice.enrolled_at.desc())
+        select(KioskDevice)
+        .options(selectinload(KioskDevice.enrolled_by))
+        .order_by(KioskDevice.enrolled_at.desc())
     )
     devices = result.scalars().all()
 
