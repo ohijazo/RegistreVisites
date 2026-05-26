@@ -5,6 +5,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 from app.db.models import Visit
+from app.services.timefmt import local as _local
 
 EXPORT_COLUMNS = [
     ("ID", lambda v: str(v.id)),
@@ -15,11 +16,11 @@ EXPORT_COLUMNS = [
     ("Departament", lambda v: getattr(v.department, "name_ca", "") if v.department else ""),
     ("Motiu visita", lambda v: v.visit_reason),
     ("Idioma", lambda v: v.language),
-    ("Data entrada", lambda v: v.checked_in_at.strftime("%d/%m/%Y %H:%M") if v.checked_in_at else ""),
-    ("Data sortida", lambda v: v.checked_out_at.strftime("%d/%m/%Y %H:%M") if v.checked_out_at else ""),
+    ("Data entrada", lambda v: _local(v.checked_in_at, "%d/%m/%Y %H:%M")),
+    ("Data sortida", lambda v: _local(v.checked_out_at, "%d/%m/%Y %H:%M")),
     ("Durada (min)", lambda v: round((v.checked_out_at - v.checked_in_at).total_seconds() / 60) if v.checked_out_at and v.checked_in_at else ""),
     ("Mètode sortida", lambda v: v.checkout_method or ""),
-    ("RGPD acceptat", lambda v: v.accepted_at.strftime("%d/%m/%Y %H:%M") if v.accepted_at else ""),
+    ("RGPD acceptat", lambda v: _local(v.accepted_at, "%d/%m/%Y %H:%M")),
 ]
 
 

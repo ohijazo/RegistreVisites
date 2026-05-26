@@ -55,8 +55,8 @@
             <p>{{ settings.COMPANY_NAME }}</p>
         </div>
         <div class="meta">
-            <p>Data: {{ now.strftime('%d/%m/%Y') }}</p>
-            <p>Hora: {{ now.strftime('%H:%M:%S') }}</p>
+            <p>Data: {{ now | local('%d/%m/%Y') }}</p>
+            <p>Hora: {{ now | local('%H:%M:%S') }}</p>
             <p>Generada per: {{ admin.name }}</p>
         </div>
     </div>
@@ -91,7 +91,7 @@
                 <td>{{ visit.company }}</td>
                 <td>{{ visit.department.name_ca if visit.department else '—' }}</td>
                 <td>{{ visit.visit_reason }}</td>
-                <td>{{ visit.checked_in_at.strftime('%H:%M') }}</td>
+                <td>{{ visit.checked_in_at | local('%H:%M') }}</td>
                 <td>{{ hours }}h {{ mins }}min</td>
                 <td>{{ visit.phone or '—' }}</td>
                 <td style="width: 60px;">&#9744;</td>
@@ -106,7 +106,7 @@
     {% endif %}
 
     <div class="footer">
-        <p>Document generat automàticament pel Sistema de Registre de Visites. {{ settings.COMPANY_NAME }} — {{ now.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+        <p>Document generat automàticament pel Sistema de Registre de Visites. {{ settings.COMPANY_NAME }} — {{ now | local('%d/%m/%Y %H:%M:%S') }}</p>
     </div>
 
 </body>

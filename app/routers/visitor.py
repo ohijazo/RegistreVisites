@@ -66,6 +66,8 @@ async def _has_active_visit_for_dni(dni: str, db: AsyncSession) -> bool:
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["lang_attr"] = lambda obj, attr_prefix, lang: getattr(obj, f"{attr_prefix}{lang}", getattr(obj, f"{attr_prefix}ca", ""))
+from app.services.timefmt import local as _local_dt
+templates.env.filters["local"] = _local_dt
 
 
 def _lang_context(lang: str) -> dict:

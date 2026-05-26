@@ -71,8 +71,8 @@
                 <tbody class="divide-y divide-gray-100">
                     {% for v in visits %}
                     <tr class="{% if v.first_name == '[ANONIMITZAT]' %}bg-gray-50 italic{% endif %}">
-                        <td class="px-5 py-3 text-gray-800 whitespace-nowrap">{{ v.checked_in_at.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ v.checked_out_at.strftime('%d/%m/%Y %H:%M') if v.checked_out_at else '—' }}</td>
+                        <td class="px-5 py-3 text-gray-800 whitespace-nowrap">{{ v.checked_in_at | local('%d/%m/%Y %H:%M') }}</td>
+                        <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ v.checked_out_at | local('%d/%m/%Y %H:%M') if v.checked_out_at else '—' }}</td>
                         <td class="px-5 py-3 text-gray-800">{{ v.first_name }}{% if v.last_name %} {{ v.last_name }}{% endif %}</td>
                         <td class="px-5 py-3 text-gray-600">{{ v.company }}</td>
                         <td class="px-5 py-3 text-gray-600">{{ v.department.name_ca if v.department else '—' }}</td>

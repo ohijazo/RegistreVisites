@@ -50,7 +50,7 @@
             <p>{{ settings.COMPANY_NAME }}</p>
         </div>
         <div class="meta">
-            <p>Data impressió: {{ now.strftime('%d/%m/%Y %H:%M') }}</p>
+            <p>Data impressió: {{ now | local('%d/%m/%Y %H:%M') }}</p>
             <p>Generat per: {{ admin.name }}</p>
         </div>
     </div>
@@ -91,8 +91,8 @@
                 <td>{{ visit.company }}</td>
                 <td>{{ visit.department.name_ca if visit.department else '—' }}</td>
                 <td>{{ visit.visit_reason }}</td>
-                <td>{{ visit.checked_in_at.strftime('%d/%m %H:%M') }}</td>
-                <td>{% if visit.checked_out_at %}{{ visit.checked_out_at.strftime('%d/%m %H:%M') }}{% else %}—{% endif %}</td>
+                <td>{{ visit.checked_in_at | local('%d/%m %H:%M') }}</td>
+                <td>{% if visit.checked_out_at %}{{ visit.checked_out_at | local('%d/%m %H:%M') }}{% else %}—{% endif %}</td>
                 <td>
                     {% if visit.checked_out_at %}
                     {% set dur = ((visit.checked_out_at - visit.checked_in_at).total_seconds() / 60)|int %}
@@ -111,7 +111,7 @@
     </table>
 
     <div class="footer">
-        <p>Document generat pel Sistema de Registre de Visites. {{ settings.COMPANY_NAME }} — {{ now.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+        <p>Document generat pel Sistema de Registre de Visites. {{ settings.COMPANY_NAME }} — {{ now | local('%d/%m/%Y %H:%M:%S') }}</p>
     </div>
 
     <script>window.addEventListener('load', function() { window.print(); });</script>

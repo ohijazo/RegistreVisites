@@ -57,7 +57,7 @@
             <div>
                 <p class="text-xs text-gray-600 uppercase tracking-wider mb-1">Últim accés</p>
                 <p class="font-medium text-gray-800">
-                    {{ admin.last_login.strftime('%d/%m/%Y %H:%M') if admin.last_login else 'Mai' }}
+                    {{ admin.last_login | local('%d/%m/%Y %H:%M') if admin.last_login else 'Mai' }}
                 </p>
             </div>
         </div>

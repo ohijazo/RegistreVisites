@@ -16,7 +16,7 @@
         </p>
 
         <p class="text-gray-500 mb-6">
-            {{ t('confirmation_checkin_time', time=visit.checked_in_at.strftime('%H:%M')) }}
+            {{ t('confirmation_checkin_time', time=visit.checked_in_at | local('%H:%M')) }}
         </p>
 
         <!-- Info sortida -->

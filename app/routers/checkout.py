@@ -18,6 +18,8 @@ from app.services.rate_limit import limiter
 
 router = APIRouter(prefix="/checkout")
 templates = Jinja2Templates(directory="app/templates")
+from app.services.timefmt import local as _local_dt
+templates.env.filters["local"] = _local_dt
 
 
 def _get_lang(request: Request) -> str:

@@ -96,7 +96,7 @@
                         <td class="px-2 py-1">{{ row.visitor_first_name }} {{ row.visitor_last_name or '' }}</td>
                         <td class="px-2 py-1">{{ row.visitor_company or '—' }}</td>
                         <td class="px-2 py-1">{{ row.host_name }}</td>
-                        <td class="px-2 py-1">{{ row.expected_date }}{% if row.expected_time %} {{ row.expected_time.strftime('%H:%M') }}{% endif %}</td>
+                        <td class="px-2 py-1">{{ row.expected_date }}{% if row.expected_time %} {{ row.expected_time | local('%H:%M') }}{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

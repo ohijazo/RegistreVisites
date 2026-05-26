@@ -57,7 +57,7 @@
             <tbody class="divide-y divide-gray-100">
                 {% for log in logs %}
                 <tr class="hover:bg-gray-50">
-                    <td class="px-5 py-3 text-gray-600">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                    <td class="px-5 py-3 text-gray-600">{{ log.created_at | local('%d/%m/%Y %H:%M:%S') }}</td>
                     <td class="px-5 py-3 font-medium text-gray-800">{{ log.admin.name if log.admin else '—' }}</td>
                     <td class="px-5 py-3">
                         {% if log.action == 'view_id_document' %}

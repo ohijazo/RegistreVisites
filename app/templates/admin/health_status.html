@@ -6,7 +6,7 @@
 <div class="max-w-5xl">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-800">Salut del sistema</h1>
-        <p class="text-xs text-gray-600">Generat: {{ now.strftime('%d/%m/%Y %H:%M') }} UTC</p>
+        <p class="text-xs text-gray-600">Generat: {{ now | local('%d/%m/%Y %H:%M') }}</p>
     </div>
 
     {% if config_warnings %}
@@ -37,7 +37,7 @@
             <p class="text-lg font-bold text-gray-700 mt-1">{{ auto_close_after_hours }}h</p>
             <p class="text-xs text-gray-600 mt-0.5">
                 {% if last_auto_close %}
-                Última: {{ last_auto_close.created_at.strftime('%d/%m %H:%M') }}
+                Última: {{ last_auto_close.created_at | local('%d/%m %H:%M') }}
                 {% else %}Encara no s'ha executat{% endif %}
             </p>
         </div>

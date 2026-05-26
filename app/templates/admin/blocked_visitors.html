@@ -53,10 +53,10 @@
                     <td class="px-5 py-3 text-gray-600 font-mono text-xs">{{ item.id_document_hash[:16] }}…</td>
                     <td class="px-5 py-3 text-gray-700 max-w-xs truncate" title="{{ item.reason }}">{{ item.reason }}</td>
                     <td class="px-5 py-3 text-gray-600">{{ item.blocked_by.name if item.blocked_by else 'sistema' }}</td>
-                    <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ item.blocked_at.strftime('%d/%m/%Y') }}</td>
+                    <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ item.blocked_at | local('%d/%m/%Y') }}</td>
                     <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
                         {% if item.expires_at %}
-                            {{ item.expires_at.strftime('%d/%m/%Y') }}
+                            {{ item.expires_at | local('%d/%m/%Y') }}
                         {% else %}
                             <span class="text-gray-600">Permanent</span>
                         {% endif %}

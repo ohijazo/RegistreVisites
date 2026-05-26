@@ -40,7 +40,7 @@
                 <span class="text-blue-400">·</span>
                 {% endif %}
             </span>
-            <span class="text-xs font-mono text-gray-600 w-12 flex-shrink-0">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</span>
+            <span class="text-xs font-mono text-gray-600 w-12 flex-shrink-0">{{ item.expected_time | local('%H:%M') if item.expected_time else '—' }}</span>
             <a href="/admin/expected/{{ item.id }}" class="hover:underline {% if item.status == 'arrived' %}line-through text-gray-500{% else %}text-blue-700{% endif %}">{{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}</a>
             {% if item.visitor_company %}<span class="text-gray-600 {% if item.status == 'arrived' %}line-through{% endif %}">· {{ item.visitor_company }}</span>{% endif %}
             <span class="text-gray-600">→ {{ item.host_name }}</span>

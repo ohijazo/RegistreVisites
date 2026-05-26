@@ -71,7 +71,7 @@
                     </label>
                 </td>
                 <td class="px-5 py-3 text-gray-500 text-xs">
-                    {{ user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login else 'Mai' }}
+                    {{ user.last_login | local('%d/%m/%Y %H:%M') if user.last_login else 'Mai' }}
                 </td>
                 <td class="px-5 py-3 flex gap-1">
                     <button form="{{ fid }}" type="submit"

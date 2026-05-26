@@ -35,7 +35,7 @@
         <p class="text-gray-600 mb-3">
             Aquest dispositiu ja està matriculat com a
             <strong>{{ current_device.alias }}</strong>
-            (des de {{ current_device.enrolled_at.strftime('%d/%m/%Y') }}).
+            (des de {{ current_device.enrolled_at | local('%d/%m/%Y') }}).
         </p>
         <form method="POST" action="/admin/kiosk/unenroll-self">
             {% include "_csrf.html" %}
@@ -129,14 +129,14 @@
                         {% endif %}
                     </td>
                     <td class="px-6 py-3 text-sm">
-                        {{ d.enrolled_at.strftime('%d/%m/%Y') }}
+                        {{ d.enrolled_at | local('%d/%m/%Y') }}
                         {% if d.enrolled_by %}
                         <div class="text-xs text-gray-500">per {{ d.enrolled_by.name }}</div>
                         {% endif %}
                     </td>
                     <td class="px-6 py-3 text-sm">
                         {% if d.last_seen_at %}
-                            {{ d.last_seen_at.strftime('%d/%m/%Y %H:%M') }}
+                            {{ d.last_seen_at | local('%d/%m/%Y %H:%M') }}
                         {% else %}
                             <span class="text-gray-400 italic">mai</span>
                         {% endif %}
@@ -147,7 +147,7 @@
                     <td class="px-6 py-3 text-sm">
                         {% if d.revoked_at %}
                             <span class="text-red-600">Revocat</span>
-                            <div class="text-xs text-gray-500">{{ d.revoked_at.strftime('%d/%m/%Y') }}</div>
+                            <div class="text-xs text-gray-500">{{ d.revoked_at | local('%d/%m/%Y') }}</div>
                         {% else %}
                             <span class="text-green-700">Actiu</span>
                         {% endif %}

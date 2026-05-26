@@ -46,7 +46,7 @@
             <p>{{ settings.COMPANY_NAME }}</p>
         </div>
         <div class="meta">
-            <p>Generat: {{ now.strftime('%d/%m/%Y %H:%M') }}</p>
+            <p>Generat: {{ now | local('%d/%m/%Y %H:%M') }}</p>
             <p>Per: {{ admin.name }}</p>
             {% if mine_active %}<p><strong>Filtre:</strong> les meves ({{ admin.host_alias }})</p>{% endif %}
         </div>
@@ -76,8 +76,8 @@
             {% for item in items %}
             <tr>
                 <td><span class="checkbox"></span></td>
-                <td>{{ item.expected_date.strftime('%d/%m') }}</td>
-                <td class="time">{{ item.expected_time.strftime('%H:%M') if item.expected_time else '—' }}</td>
+                <td>{{ item.expected_date | local('%d/%m') }}</td>
+                <td class="time">{{ item.expected_time | local('%H:%M') if item.expected_time else '—' }}</td>
                 <td><strong>{{ item.visitor_first_name }}{% if item.visitor_last_name %} {{ item.visitor_last_name }}{% endif %}</strong></td>
                 <td>{{ item.visitor_company or '—' }}</td>
                 <td>{{ item.visitor_phone or '—' }}</td>
@@ -102,7 +102,7 @@
     {% endif %}
 
     <div class="footer">
-        Generat automàticament pel Sistema de Registre de Visites de {{ settings.COMPANY_NAME }} · {{ now.strftime('%d/%m/%Y %H:%M:%S') }}
+        Generat automàticament pel Sistema de Registre de Visites de {{ settings.COMPANY_NAME }} · {{ now | local('%d/%m/%Y %H:%M:%S') }}
     </div>
 </body>
 </html>

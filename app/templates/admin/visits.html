@@ -99,10 +99,10 @@
                     <td class="px-5 py-3 font-medium text-gray-800">{{ visit.first_name }} {{ visit.last_name }}</td>
                     <td class="px-5 py-3 text-gray-600">{{ visit.company }}</td>
                     <td class="px-5 py-3 text-gray-600">{{ visit.department.name_ca if visit.department else '—' }}</td>
-                    <td class="px-5 py-3 text-gray-600">{{ visit.checked_in_at.strftime('%d/%m %H:%M') }}</td>
+                    <td class="px-5 py-3 text-gray-600">{{ visit.checked_in_at | local('%d/%m %H:%M') }}</td>
                     <td class="px-5 py-3 text-gray-600">
                         {% if visit.checked_out_at %}
-                            {{ visit.checked_out_at.strftime('%d/%m %H:%M') }}
+                            {{ visit.checked_out_at | local('%d/%m %H:%M') }}
                         {% else %}—{% endif %}
                     </td>
                     <td class="px-5 py-3 text-gray-600">

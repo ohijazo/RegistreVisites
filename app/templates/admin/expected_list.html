@@ -122,9 +122,9 @@
                 {% for item in items %}
                 <tr class="hover:bg-gray-50 {% if item.status in ('arrived', 'cancelled', 'no_show') %}opacity-70 bg-gray-50{% endif %}">
                     <td class="px-5 py-3 text-gray-800 whitespace-nowrap">
-                        {{ item.expected_date.strftime('%d/%m/%Y') }}
+                        {{ item.expected_date | local('%d/%m/%Y') }}
                         {% if item.expected_time %}
-                        <span class="text-xs font-mono text-gray-600">{{ item.expected_time.strftime('%H:%M') }}</span>
+                        <span class="text-xs font-mono text-gray-600">{{ item.expected_time | local('%H:%M') }}</span>
                         {% endif %}
                     </td>
                     <td class="px-5 py-3 font-medium">

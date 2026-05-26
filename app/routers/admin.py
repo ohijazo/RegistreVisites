@@ -46,6 +46,8 @@ def _clean_legal(html: str) -> str:
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["b64encode"] = lambda data: base64.b64encode(data).decode() if data else ""
+from app.services.timefmt import local as _local_dt
+templates.env.filters["local"] = _local_dt
 
 
 # ── Helpers ──────────────────────────────────────────────
