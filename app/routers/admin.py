@@ -734,6 +734,102 @@ async def manual_checkout(
     return RedirectResponse("/admin/", status_code=302)
 
 
+# ── Editar timestamps d'una visita ───────────────────────
+
+from zoneinfo import ZoneInfo
+from urllib.parse import quote as _urlquote
+
+_EDIT_LOCAL_TZ = ZoneInfo("Europe/Madrid")
+
+
+def _parse_local_datetime(value: str) -> datetime:
+    """Converteix un input HTML datetime-local (Europe/Madrid) a UTC."""
+    dt = datetime.fromisoformat(value)
+    return dt.replace(tzinfo=_EDIT_LOCAL_TZ).astimezone(timezone.utc)
+
+
+@router.post("/visits/{visit_id}/edit-times")
+async def edit_visit_times(
+    visit_id: str,
+    request: Request,
+    checked_in_at: str = Form(...),
+    checked_out_at: str = Form(""),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin")),
+):
+    result = await db.execute(select(Visit).where(Visit.id == visit_id))
+    visit = result.scalar_one_or_none()
+    if not visit:
+        return RedirectResponse("/admin/visits", status_code=302)
+
+    detail_url = f"/admin/visits/{visit_id}"
+
+    err_in = "Data d’entrada no vàlida"
+    err_out = "Data de sortida no vàlida"
+    err_order = "La sortida ha de ser posterior a l’entrada"
+
+    try:
+        new_in = _parse_local_datetime(checked_in_at)
+    except ValueError:
+        return RedirectResponse(
+            f"{detail_url}?edit_error={_urlquote(err_in)}",
+            status_code=302,
+        )
+
+    new_out: datetime | None = None
+    if checked_out_at.strip():
+        try:
+            new_out = _parse_local_datetime(checked_out_at)
+        except ValueError:
+            return RedirectResponse(
+                f"{detail_url}?edit_error={_urlquote(err_out)}",
+                status_code=302,
+            )
+        if new_out <= new_in:
+            return RedirectResponse(
+                f"{detail_url}?edit_error={_urlquote(err_order)}",
+                status_code=302,
+            )
+
+    old_in = visit.checked_in_at
+    old_out = visit.checked_out_at
+    old_method = visit.checkout_method
+
+    visit.checked_in_at = new_in
+    visit.checked_out_at = new_out
+    # Si afegim una sortida que no existia, marquem el mètode com a manual.
+    # Si l'esborrem, eliminem també el mètode perquè la visita torna a estar activa.
+    if new_out is not None and old_out is None:
+        visit.checkout_method = "manual"
+    elif new_out is None:
+        visit.checkout_method = None
+
+    def _iso(d):
+        return d.isoformat() if d else None
+
+    db.add(AuditLog(
+        admin_id=admin.id,
+        visit_id=visit.id,
+        action="edit_visit_times",
+        ip_address=request.client.host if request.client else None,
+        detail=json.dumps({
+            "old": {
+                "checked_in_at": _iso(old_in),
+                "checked_out_at": _iso(old_out),
+                "checkout_method": old_method,
+            },
+            "new": {
+                "checked_in_at": _iso(visit.checked_in_at),
+                "checked_out_at": _iso(visit.checked_out_at),
+                "checkout_method": visit.checkout_method,
+            },
+        }),
+    ))
+    await db.commit()
+
+    return RedirectResponse(f"{detail_url}?edit_ok=1", status_code=302)
+
+
 # ── Eliminar visita (RGPD) ───────────────────────────────
 
 @router.post("/visits/{visit_id}/delete")
