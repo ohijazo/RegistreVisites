@@ -645,9 +645,15 @@ async def visit_detail(
     if not visit:
         return RedirectResponse("/admin/visits", status_code=302)
 
-    # Si hi ha una visita prevista vinculada, la mostrem al detall
+    # Si hi ha una visita prevista vinculada, la mostrem al detall.
+    # No fem scalar_one_or_none() perquè visit_id no és unique a expected_visits:
+    # si una visita queda enllaçada a més d'una previsió (cas anòmal però
+    # possible amb edicions manuals), la pàgina de detall no ha de petar.
     expected_result = await db.execute(
-        select(ExpectedVisit).where(ExpectedVisit.visit_id == visit.id)
+        select(ExpectedVisit)
+        .where(ExpectedVisit.visit_id == visit.id)
+        .order_by(ExpectedVisit.updated_at.desc())
+        .limit(1)
     )
     expected = expected_result.scalar_one_or_none()
 
