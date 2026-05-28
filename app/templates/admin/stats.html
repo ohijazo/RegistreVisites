@@ -89,7 +89,7 @@
 
     <!-- Top empreses -->
     <div class="bg-white rounded-xl shadow-sm p-5">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Top empreses visitants</h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Top empreses visitants <span class="text-xs text-gray-600 font-normal">(clic per filtrar)</span></h2>
         <table class="w-full text-sm" id="table-companies">
             <thead class="text-gray-500 text-xs uppercase">
                 <tr>
@@ -99,7 +99,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100" id="tbody-companies">
                 {% for c in top_companies %}
-                <tr>
+                <tr class="cursor-pointer hover:bg-gray-50" data-company="{{ c.company }}">
                     <td class="py-2 text-gray-800">{{ c.company }}</td>
                     <td class="py-2 text-right text-gray-600">{{ c.total }}</td>
                 </tr>
@@ -131,7 +131,14 @@
             if (activeFilter.type === 'dept') return v.dept === activeFilter.value;
             if (activeFilter.type === 'day') return v.day === activeFilter.value;
             if (activeFilter.type === 'hour') return v.hour === activeFilter.value;
+            if (activeFilter.type === 'company') return v.company === activeFilter.value;
             return true;
+        });
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function(c) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
         });
     }
 
@@ -208,7 +215,11 @@
             tbody.innerHTML = '<tr><td colspan="2" class="py-4 text-center text-gray-600">Sense dades</td></tr>';
         } else {
             tbody.innerHTML = agg.companies.map(function(c) {
-                return '<tr class="hover:bg-gray-50"><td class="py-2 text-gray-800">' + c.company + '</td><td class="py-2 text-right text-gray-600">' + c.total + '</td></tr>';
+                var isSel = activeFilter && activeFilter.type === 'company' && activeFilter.value === c.company;
+                var rowCls = isSel ? 'cursor-pointer bg-blue-100 font-semibold' : 'cursor-pointer hover:bg-gray-50';
+                return '<tr class="' + rowCls + '" data-company="' + escapeHtml(c.company) + '">' +
+                       '<td class="py-2 text-gray-800">' + escapeHtml(c.company) + '</td>' +
+                       '<td class="py-2 text-right text-gray-600">' + c.total + '</td></tr>';
             }).join('');
         }
 
@@ -220,6 +231,7 @@
             if (activeFilter.type === 'dept') label = 'Departament: ' + activeFilter.value;
             if (activeFilter.type === 'day') label = 'Dia: ' + activeFilter.value;
             if (activeFilter.type === 'hour') label = 'Hora: ' + activeFilter.value + ':00';
+            if (activeFilter.type === 'company') label = 'Empresa: ' + activeFilter.value;
             document.getElementById('filter-label').textContent = label;
         } else {
             filterEl.classList.add('hidden');
@@ -300,6 +312,13 @@
             responsive: true,
             onClick: function(evt) { chartClick(chartDept, 'dept', function(i) { return chartDept.data.labels[i]; })(evt); }
         }
+    });
+
+    // Click a una fila del Top empreses → filtra (event delegation)
+    document.getElementById('tbody-companies').addEventListener('click', function(evt) {
+        var row = evt.target.closest('tr[data-company]');
+        if (!row) return;
+        setFilter('company', row.getAttribute('data-company'));
     });
 
     // Gràfic horari
