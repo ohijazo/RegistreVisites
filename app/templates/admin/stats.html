@@ -83,7 +83,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-white rounded-xl shadow-sm p-5">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per franja horària <span class="text-xs text-gray-600 font-normal">(clic per filtrar)</span></h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Visites per franja horària <span class="text-xs text-gray-600 font-normal">(presència; clic per filtrar)</span></h2>
         <canvas id="chart-hourly" height="200"></canvas>
     </div>
 
@@ -130,7 +130,7 @@
         return rawVisits.filter(function(v) {
             if (activeFilter.type === 'dept') return v.dept === activeFilter.value;
             if (activeFilter.type === 'day') return v.day === activeFilter.value;
-            if (activeFilter.type === 'hour') return v.hour === activeFilter.value;
+            if (activeFilter.type === 'hour') return v.start_hour <= activeFilter.value && v.end_hour >= activeFilter.value;
             if (activeFilter.type === 'company') return v.company === activeFilter.value;
             return true;
         });
@@ -154,9 +154,14 @@
         var dept = Object.keys(byDept).sort(function(a,b) { return byDept[b] - byDept[a]; })
             .map(function(d) { return {name: d, total: byDept[d]}; });
 
-        // Per hora
+        // Per hora: comptem cada visita a totes les hores que va estar present
+        // (de start_hour fins a end_hour, ambdues incloses).
         var byHour = {};
-        data.forEach(function(v) { byHour[v.hour] = (byHour[v.hour] || 0) + 1; });
+        data.forEach(function(v) {
+            for (var h = v.start_hour; h <= v.end_hour; h++) {
+                byHour[h] = (byHour[h] || 0) + 1;
+            }
+        });
         var hourly = [];
         for (var h = 7; h <= 20; h++) { hourly.push({hour: h, total: byHour[h] || 0}); }
 

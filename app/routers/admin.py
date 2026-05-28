@@ -967,15 +967,17 @@ async def stats_page(
         for row in top_companies_result
     ]
 
-    # Dades crues per filtratge interactiu (dia, dept, hora, empresa per cada visita).
-    # Limitem a 5000 perquè el JSON s'injecta al HTML i es processa al navegador;
-    # períodes amb més registres es trunquen i s'avisa l'usuari.
+    # Dades crues per filtratge interactiu. Calculem dia/hora en hora local
+    # (Europe/Madrid) per coherència amb la resta de la UI: si extraiem amb
+    # SQL func.extract sobre un timestamp UTC, una visita a les 01:00 local
+    # en hivern queda comptabilitzada al dia anterior.
+    # Limitem a 5000 perquè el JSON s'injecta al HTML i es processa al navegador.
     RAW_VISITS_LIMIT = 5000
     raw_result = await db.execute(
         select(
-            func.date_trunc("day", Visit.checked_in_at).label("day"),
+            Visit.checked_in_at,
+            Visit.checked_out_at,
             Department.name_ca.label("dept"),
-            func.extract("hour", Visit.checked_in_at).label("hour"),
             Visit.company,
             Visit.first_name,
             Visit.last_name,
@@ -986,16 +988,26 @@ async def stats_page(
     )
     raw_rows = list(raw_result)
     raw_visits_truncated = len(raw_rows) > RAW_VISITS_LIMIT
-    raw_visits = [
-        {
-            "day": row.day.strftime("%Y-%m-%d"),
+    raw_visits = []
+    for row in raw_rows[:RAW_VISITS_LIMIT]:
+        ci_local = row.checked_in_at.astimezone(_EDIT_LOCAL_TZ)
+        co_local = row.checked_out_at.astimezone(_EDIT_LOCAL_TZ) if row.checked_out_at else None
+        start_hour = ci_local.hour
+        if co_local is None:
+            end_hour = start_hour
+        elif co_local.date() != ci_local.date():
+            # Visita que creua mitjanit: comptem fins al final del dia d'entrada.
+            end_hour = 23
+        else:
+            end_hour = co_local.hour
+        raw_visits.append({
+            "day": ci_local.strftime("%Y-%m-%d"),
             "dept": row.dept or "—",
-            "hour": int(row.hour),
+            "start_hour": start_hour,
+            "end_hour": end_hour,
             "company": row.company,
             "name": f"{row.first_name} {row.last_name}",
-        }
-        for row in raw_rows[:RAW_VISITS_LIMIT]
-    ]
+        })
 
     ctx = _admin_context(admin)
     ctx.update({
