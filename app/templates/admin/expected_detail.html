@@ -116,14 +116,19 @@
                 {% if item.visitor_email %}
                 <form method="POST" action="/admin/expected/{{ item.id }}/send-visitor-invitation"
                       class="mb-2"
+                      data-loading-btn-text="Enviant…"
                       onsubmit="return confirm('Enviar invitació amb el codi a {{ item.visitor_email }}?');">
                     {% include "_csrf.html" %}
                     <button type="submit" {% if not smtp_ready %}disabled title="Cal configurar el backend d'email al .env"{% endif %}
-                            class="text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            class="js-submit-btn text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1">
+                        <svg class="js-spinner hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"></circle>
+                            <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"></path>
+                        </svg>
+                        <svg class="js-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                         </svg>
-                        {% if item.visitor_invitation_sent_at %}Reenviar invitació al visitant{% else %}Enviar invitació al visitant{% endif %}
+                        <span class="js-btn-label">{% if item.visitor_invitation_sent_at %}Reenviar invitació al visitant{% else %}Enviar invitació al visitant{% endif %}</span>
                     </button>
                 </form>
                 {% if item.visitor_invitation_sent_at %}
@@ -389,7 +394,8 @@
                     onclick="document.getElementById('email-modal').classList.add('hidden')"
                     class="text-gray-600 hover:text-gray-800 text-2xl leading-none">&times;</button>
         </div>
-        <form method="POST" action="/admin/expected/{{ item.id }}/notify-email" class="p-6 space-y-4">
+        <form method="POST" action="/admin/expected/{{ item.id }}/notify-email" class="p-6 space-y-4"
+              data-loading-btn-text="Enviant…">
             {% include "_csrf.html" %}
             <p class="text-sm text-gray-700">
                 S'enviarà la mateixa notificació que es genera automàticament en crear la visita prevista, amb les dades actuals del registre.
@@ -413,8 +419,12 @@
                     Cancel·lar
                 </button>
                 <button type="submit"
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
-                    Enviar notificació
+                        class="js-submit-btn bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white px-5 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-2">
+                    <svg class="js-spinner hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"></circle>
+                        <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"></path>
+                    </svg>
+                    <span class="js-btn-label">Enviar notificació</span>
                 </button>
             </div>
         </form>
@@ -501,5 +511,25 @@ document.addEventListener('keydown', function(e) {
     }
 });
 {% endif %}
+
+// Feedback visual als formularis amb data-loading-btn-text: el botó es
+// deshabilita i mostra un spinner mentre el POST està en curs.
+// Si l'onsubmit ha cancel·lat l'event (p.ex. confirm() retorna false), no fem res.
+document.querySelectorAll('form[data-loading-btn-text]').forEach(function(form) {
+    form.addEventListener('submit', function(ev) {
+        if (ev.defaultPrevented) return;
+        var btn = form.querySelector('.js-submit-btn');
+        if (!btn || btn.disabled) return;
+        setTimeout(function() {
+            btn.disabled = true;
+            var spinner = btn.querySelector('.js-spinner');
+            var icon = btn.querySelector('.js-icon');
+            var label = btn.querySelector('.js-btn-label');
+            if (spinner) spinner.classList.remove('hidden');
+            if (icon) icon.classList.add('hidden');
+            if (label) label.textContent = form.dataset.loadingBtnText || 'Processant…';
+        }, 50);
+    });
+});
 </script>
 {% endblock %}

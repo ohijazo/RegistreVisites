@@ -1,13 +1,15 @@
+import asyncio
 import base64
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone, timedelta, date
 
 import bleach
 from fastapi import APIRouter, Request, Depends, Form, Query, Response, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, select, func, and_, or_, text, delete
+from sqlalchemy import case, select, func, and_, or_, text, delete, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from jose import jwt
@@ -16,7 +18,7 @@ from app.services.auth import hash_password, verify_password
 from app.services.rate_limit import limiter
 
 from app.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, AsyncSessionLocal
 from app.db.models import AdminUser, BlockedVisitor, KioskDevice, Visit, Department, LegalDocument, AuditLog, ExpectedVisit
 from app.dependencies import get_current_admin, require_role
 from app.services.crypto import decrypt, hash_id_document, normalize_id_document
@@ -1976,71 +1978,66 @@ def _parse_email_list(value: str) -> list[str]:
     return deduped
 
 
-async def _notify_expected_created(
-    db: AsyncSession,
-    request: Request,
-    admin: AdminUser,
-    item: ExpectedVisit,
+_email_bg_logger = logging.getLogger("app.email.bg")
+
+
+async def _send_email_bg(
+    *,
     recipients: list[str],
+    subject: str,
+    body: str,
+    html_body: str,
+    expected_id: str,
+    timestamp_field: str,           # 'last_email_sent_at' | 'visitor_invitation_sent_at'
+    update_recipients_too: bool,    # actualitza last_email_recipients quan True
+    audit_admin_id,
+    audit_ip: str | None,
+    audit_action_ok: str,
+    audit_action_fail: str,
+    audit_detail_extra: dict,
 ) -> None:
-    """Envia la notificació automàtica de creació d'una visita prevista
-    i deixa rastre a audit_logs i als camps last_email_* del registre.
-
-    Si el backend no està configurat o l'enviament falla, només queda
-    rastre a audit_logs (no llança excepció — la creació no s'ha de
-    desfer per culpa d'un error d'email).
+    """Envia un email fora del cicle del request i actualitza el registre
+    + audit_log amb una sessió de BD pròpia. Captura totes les excepcions
+    perquè és una tasca òrfena: si propagués, la traça només sortiria a stderr.
     """
-    if not recipients:
-        return
-    if not smtp_configured():
-        db.add(AuditLog(
-            admin_id=admin.id,
-            visit_id=None,
-            action="expected_visit_email_skipped",
-            ip_address=request.client.host if request.client else None,
-            detail=json.dumps({
-                "expected_id": str(item.id),
-                "reason": "email_backend_not_configured",
-                "recipients": recipients,
-            }),
-        ))
-        return
+    try:
+        ok, msg = await send_email(recipients, subject, body, html_body=html_body)
+    except Exception as exc:
+        _email_bg_logger.exception(
+            "Error inesperat enviant email a %s (expected_id=%s)",
+            recipients, expected_id,
+        )
+        ok, msg = False, str(exc)[:400]
 
-    # _build_email_defaults accedeix a item.department (relació lazy);
-    # en context async cal carregar-la explícitament abans, altrament
-    # SQLAlchemy llança MissingGreenlet.
-    if item.department_id:
-        await db.refresh(item, attribute_names=["department"])
-
-    subject, body = _build_email_defaults(item)
-    html_body = _render_expected_email_html(item, subject)
-    ok, msg = await send_email(recipients, subject, body, html_body=html_body)
-    if ok:
-        item.last_email_sent_at = datetime.now(timezone.utc)
-        item.last_email_recipients = ", ".join(recipients)
-        db.add(AuditLog(
-            admin_id=admin.id,
-            visit_id=None,
-            action="expected_visit_email_sent_auto",
-            ip_address=request.client.host if request.client else None,
-            detail=json.dumps({
-                "expected_id": str(item.id),
-                "recipients": recipients,
-                "subject": subject[:300],
-            }),
-        ))
-    else:
-        db.add(AuditLog(
-            admin_id=admin.id,
-            visit_id=None,
-            action="expected_visit_email_failed_auto",
-            ip_address=request.client.host if request.client else None,
-            detail=json.dumps({
-                "expected_id": str(item.id),
-                "recipients": recipients,
-                "error": msg[:400],
-            }),
-        ))
+    try:
+        async with AsyncSessionLocal() as session:
+            if ok:
+                values: dict = {timestamp_field: datetime.now(timezone.utc)}
+                if update_recipients_too:
+                    values["last_email_recipients"] = ", ".join(recipients)
+                await session.execute(
+                    sa_update(ExpectedVisit)
+                    .where(ExpectedVisit.id == expected_id)
+                    .values(**values)
+                )
+            detail = {**audit_detail_extra, "recipients": recipients}
+            if ok:
+                detail["subject"] = subject[:300]
+            else:
+                detail["error"] = msg[:400]
+            session.add(AuditLog(
+                admin_id=audit_admin_id,
+                visit_id=None,
+                action=audit_action_ok if ok else audit_action_fail,
+                ip_address=audit_ip,
+                detail=json.dumps(detail),
+            ))
+            await session.commit()
+    except Exception:
+        _email_bg_logger.exception(
+            "Error guardant resultat d'email bg (expected_id=%s, ok=%s)",
+            expected_id, ok,
+        )
 
 
 @router.post("/expected")
@@ -2105,14 +2102,56 @@ async def expected_create(
         access_code=await generate_unique_access_code(db),
     )
     db.add(item)
-    await db.flush()  # perquè item.id estigui disponible per al log
+    await db.flush()  # perquè item.id estigui disponible
 
     # Notificació automàtica si hi ha destinataris (override del form
-    # o per defecte del .env)
+    # o per defecte del .env). L'email s'envia en background per no
+    # bloquejar la resposta del POST; aquí només preparem el payload
+    # i deixem rastre del cas "skipped" (sense backend SMTP configurat).
     recipients = _parse_email_list(notify_recipients)
-    await _notify_expected_created(db, request, admin, item, recipients)
+    email_payload = None
+    if recipients:
+        if not smtp_configured():
+            db.add(AuditLog(
+                admin_id=admin.id,
+                visit_id=None,
+                action="expected_visit_email_skipped",
+                ip_address=request.client.host if request.client else None,
+                detail=json.dumps({
+                    "expected_id": str(item.id),
+                    "reason": "email_backend_not_configured",
+                    "recipients": recipients,
+                }),
+            ))
+        else:
+            # _build_email_defaults i _render_expected_email_html accedeixen
+            # a item.department (lazy). Cal carregar-la abans del commit
+            # perquè la tasca pugui treballar amb un payload ja serialitzat.
+            if item.department_id:
+                await db.refresh(item, attribute_names=["department"])
+            subject, body = _build_email_defaults(item)
+            html_body = _render_expected_email_html(item, subject)
+            email_payload = (recipients, subject, body, html_body, str(item.id))
 
     await db.commit()
+
+    if email_payload:
+        recipients, subject, body, html_body, expected_id = email_payload
+        asyncio.create_task(_send_email_bg(
+            recipients=recipients,
+            subject=subject,
+            body=body,
+            html_body=html_body,
+            expected_id=expected_id,
+            timestamp_field="last_email_sent_at",
+            update_recipients_too=True,
+            audit_admin_id=admin.id,
+            audit_ip=request.client.host if request.client else None,
+            audit_action_ok="expected_visit_email_sent_auto",
+            audit_action_fail="expected_visit_email_failed_auto",
+            audit_detail_extra={"expected_id": expected_id},
+        ))
+
     return RedirectResponse("/admin/expected", status_code=302)
 
 
@@ -2838,43 +2877,24 @@ async def expected_send_visitor_invitation(
 
     subject, html = _render_visitor_invitation_html(item)
     text_body = _build_visitor_invitation_text(item)
-    ok, msg = await send_email(
-        [item.visitor_email], subject, text_body, html_body=html,
-    )
 
-    if ok:
-        item.visitor_invitation_sent_at = datetime.now(timezone.utc)
-        db.add(AuditLog(
-            admin_id=admin.id,
-            visit_id=None,
-            action="visitor_invitation_sent",
-            ip_address=request.client.host if request.client else None,
-            detail=json.dumps({
-                "expected_id": str(item.id),
-                "to": item.visitor_email,
-            }),
-        ))
-        await db.commit()
-        return RedirectResponse(
-            f"/admin/expected/{item.id}?invitation_sent=ok",
-            status_code=302,
-        )
-
-    db.add(AuditLog(
-        admin_id=admin.id,
-        visit_id=None,
-        action="visitor_invitation_failed",
-        ip_address=request.client.host if request.client else None,
-        detail=json.dumps({
-            "expected_id": str(item.id),
-            "to": item.visitor_email,
-            "error": msg[:400],
-        }),
+    asyncio.create_task(_send_email_bg(
+        recipients=[item.visitor_email],
+        subject=subject,
+        body=text_body,
+        html_body=html,
+        expected_id=str(item.id),
+        timestamp_field="visitor_invitation_sent_at",
+        update_recipients_too=False,
+        audit_admin_id=admin.id,
+        audit_ip=request.client.host if request.client else None,
+        audit_action_ok="visitor_invitation_sent",
+        audit_action_fail="visitor_invitation_failed",
+        audit_detail_extra={"expected_id": str(item.id), "to": item.visitor_email},
     ))
-    await db.commit()
-    from urllib.parse import quote
+
     return RedirectResponse(
-        f"/admin/expected/{item.id}?invitation_error={quote(msg[:200])}",
+        f"/admin/expected/{item.id}?invitation_sent=ok",
         status_code=302,
     )
 
@@ -2916,44 +2936,24 @@ async def expected_notify_email(
 
     subject, body = _build_email_defaults(item)
     html_body = _render_expected_email_html(item, subject)
-    ok, msg = await send_email(rcpts, subject, body, html_body=html_body)
 
-    if ok:
-        item.last_email_sent_at = datetime.now(timezone.utc)
-        item.last_email_recipients = ", ".join(rcpts)
-        db.add(AuditLog(
-            admin_id=admin.id,
-            visit_id=None,
-            action="expected_visit_email_sent",
-            ip_address=request.client.host if request.client else None,
-            detail=json.dumps({
-                "expected_id": str(item.id),
-                "recipients": rcpts,
-                "subject": subject[:300],
-            }),
-        ))
-        await db.commit()
-        return RedirectResponse(
-            f"/admin/expected/{item.id}?email_sent=ok",
-            status_code=302,
-        )
-
-    # Error: registrem intent al log però no marquem last_email_sent_at
-    db.add(AuditLog(
-        admin_id=admin.id,
-        visit_id=None,
-        action="expected_visit_email_failed",
-        ip_address=request.client.host if request.client else None,
-        detail=json.dumps({
-            "expected_id": str(item.id),
-            "recipients": rcpts,
-            "error": msg[:400],
-        }),
+    asyncio.create_task(_send_email_bg(
+        recipients=rcpts,
+        subject=subject,
+        body=body,
+        html_body=html_body,
+        expected_id=str(item.id),
+        timestamp_field="last_email_sent_at",
+        update_recipients_too=True,
+        audit_admin_id=admin.id,
+        audit_ip=request.client.host if request.client else None,
+        audit_action_ok="expected_visit_email_sent",
+        audit_action_fail="expected_visit_email_failed",
+        audit_detail_extra={"expected_id": str(item.id)},
     ))
-    await db.commit()
-    from urllib.parse import quote
+
     return RedirectResponse(
-        f"/admin/expected/{item.id}?email_error={quote(msg[:200])}",
+        f"/admin/expected/{item.id}?email_sent=ok",
         status_code=302,
     )
 

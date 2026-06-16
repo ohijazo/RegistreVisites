@@ -15,7 +15,8 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="/admin/expected" class="bg-white rounded-xl shadow-sm p-6 space-y-4">
+    <form method="POST" action="/admin/expected" class="bg-white rounded-xl shadow-sm p-6 space-y-4"
+          data-loading-btn-text="Creant…">
         {% include "_csrf.html" %}
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -105,10 +106,6 @@
                 <p class="text-xs text-gray-600 mt-1">
                     En crear la visita s'enviarà un email a aquests destinataris amb el resum.
                     Deixa el camp en blanc per no enviar cap notificació.
-                    {% if not default_notify_recipients %}
-                    (Si vols un valor per defecte, configura
-                    <span class="font-mono">EXPECTED_NOTIFY_RECIPIENTS</span> al <span class="font-mono">.env</span>.)
-                    {% endif %}
                 </p>
             </div>
         </div>
@@ -117,8 +114,12 @@
             <a href="/admin/expected" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-medium transition">
                 Cancel·lar
             </a>
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">
-                Crear visita prevista
+            <button type="submit" class="js-submit-btn bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white px-5 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-2">
+                <svg class="js-spinner hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"></circle>
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"></path>
+                </svg>
+                <span class="js-btn-label">Crear visita prevista</span>
             </button>
         </div>
     </form>
@@ -140,5 +141,21 @@
         });
     } catch (e) {}
 })();
+
+// Feedback visual als formularis amb data-loading-btn-text: el botó es
+// deshabilita i mostra un spinner mentre el POST està en curs.
+document.querySelectorAll('form[data-loading-btn-text]').forEach(function(form) {
+    form.addEventListener('submit', function() {
+        var btn = form.querySelector('.js-submit-btn');
+        if (!btn || btn.disabled) return;
+        setTimeout(function() {
+            btn.disabled = true;
+            var spinner = btn.querySelector('.js-spinner');
+            var label = btn.querySelector('.js-btn-label');
+            if (spinner) spinner.classList.remove('hidden');
+            if (label) label.textContent = form.dataset.loadingBtnText || 'Processant…';
+        }, 50);
+    });
+});
 </script>
 {% endblock %}
