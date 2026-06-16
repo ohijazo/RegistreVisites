@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # notificació automàtica per defecte.
     EXPECTED_NOTIFY_RECIPIENTS: str = ""
 
+    # Llista d'amfitrions que sempre apareixen al desplegable d'autocomplete
+    # del camp "Amfitrió" al crear una visita prevista (separats per comes).
+    # Es combinen amb els ja usats a previsions anteriors, deduplicats.
+    EXPECTED_HOST_SUGGESTIONS: str = ""
+
     # Vàlvula de seguretat per a entorns de prova: si està definida,
     # tots els mails de qualsevol funcionalitat es redirigeixen a
     # aquesta adreça en comptes dels destinataris originals. El cos

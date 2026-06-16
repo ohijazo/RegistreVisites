@@ -1929,15 +1929,30 @@ async def api_host_suggestions(
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Llista distinta dels últims amfitrions usats (per a datalist)."""
+    """Amfitrions suggerits per al datalist: combina la llista fixa del
+    setting EXPECTED_HOST_SUGGESTIONS amb els ja usats en visites previstes
+    dels últims 180 dies, deduplicats (case-insensitive) i ordenats."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=180)
     result = await db.execute(
         select(ExpectedVisit.host_name)
         .where(ExpectedVisit.created_at >= cutoff)
         .distinct()
-        .order_by(ExpectedVisit.host_name)
     )
-    return {"hosts": [row[0] for row in result if row[0]]}
+    used = [row[0] for row in result if row[0]]
+    preset = [
+        h.strip()
+        for h in (settings.EXPECTED_HOST_SUGGESTIONS or "").split(",")
+        if h.strip()
+    ]
+    seen: set[str] = set()
+    merged: list[str] = []
+    for name in preset + used:
+        key = name.casefold()
+        if key not in seen:
+            seen.add(key)
+            merged.append(name)
+    merged.sort(key=str.casefold)
+    return {"hosts": merged}
 
 
 @router.get("/expected/new", response_class=HTMLResponse)
