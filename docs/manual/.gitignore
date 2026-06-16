@@ -1,0 +1,8 @@
+Manual_Recepcionista_Visites.docx
+*.docx
+*.pdf
+!plantilla_*.docx
+
+# Fitxers temporals de Windows
+Thumbs.db
+desktop.ini
