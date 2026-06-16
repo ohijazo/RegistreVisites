@@ -49,9 +49,11 @@ async def main():
         user.password_hash = hash_password(password)
         if args.activate:
             user.active = True
+        email = user.email
+        is_active = user.active
         await session.commit()
-        status = "activa" if user.active else "DESACTIVADA"
-        print(f"Contrasenya resetejada per {user.email} (compte: {status})")
+        status = "activa" if is_active else "DESACTIVADA"
+        print(f"Contrasenya resetejada per {email} (compte: {status})")
 
     await engine.dispose()
 
