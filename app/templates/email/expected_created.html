@@ -34,7 +34,11 @@
                 Visita prevista: {{ full_name }}
               </h1>
               <p style="margin:6px 0 0 0; color:#4b5563; font-size:14px;">
-                {{ expected_date_display }}{% if expected_time_display %} a les {{ expected_time_display }}{% endif %}
+                {% if dates_count and dates_count > 1 %}
+                  {{ dates_count }} dies · {{ dates_display }}{% if expected_time_display %} (cap a les {{ expected_time_display }}){% endif %}
+                {% else %}
+                  {{ expected_date_display }}{% if expected_time_display %} a les {{ expected_time_display }}{% endif %}
+                {% endif %}
               </p>
             </td>
           </tr>
@@ -87,10 +91,21 @@
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb;">{{ department_name }}</td>
                 </tr>
                 {% endif %}
+                {% if dates_count and dates_count > 1 %}
+                <tr>
+                  <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; color:#6b7280; vertical-align:top;">Dies previstos</td>
+                  <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; font-weight:600;">
+                    {% for d in dates_iso %}
+                      <div style="margin:1px 0;">· {{ d }}</div>
+                    {% endfor %}
+                  </td>
+                </tr>
+                {% else %}
                 <tr>
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; color:#6b7280;">Data</td>
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; font-weight:600;">{{ expected_date_display }}</td>
                 </tr>
+                {% endif %}
                 {% if expected_time_display %}
                 <tr>
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; color:#6b7280;">Hora aproximada</td>

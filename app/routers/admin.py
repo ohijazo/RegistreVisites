@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import logging
+import uuid
 from datetime import datetime, timezone, timedelta, date
 
 import bleach
@@ -1903,9 +1904,29 @@ async def expected_list(
 
     items = (await db.execute(paged)).scalars().all()
 
+    # Posició dins de la sèrie (per al badge "2/5") — només per als items
+    # que pertanyen a una sèrie multi-dia. Una sola query addicional que
+    # carrega la totalitat de cada sèrie afectada (típicament <30 files).
+    series_info: dict[str, tuple[int, int]] = {}
+    series_ids = {it.series_id for it in items if it.series_id is not None}
+    if series_ids:
+        sib_rows = (await db.execute(
+            select(ExpectedVisit.id, ExpectedVisit.series_id, ExpectedVisit.expected_date)
+            .where(ExpectedVisit.series_id.in_(series_ids))
+            .order_by(ExpectedVisit.series_id, ExpectedVisit.expected_date)
+        )).all()
+        groups: dict = {}
+        for row_id, sid, exp_date in sib_rows:
+            groups.setdefault(sid, []).append((row_id, exp_date))
+        for sid, members in groups.items():
+            total_in_series = len(members)
+            for pos, (row_id, _) in enumerate(members, start=1):
+                series_info[str(row_id)] = (pos, total_in_series)
+
     ctx = _admin_context(admin)
     ctx.update({
         "items": items,
+        "series_info": series_info,
         "range": range,
         "status_filter": status_filter,
         "mine_active": mine_active,
@@ -1993,6 +2014,121 @@ def _parse_email_list(value: str) -> list[str]:
     return deduped
 
 
+_MAX_SERIES_DATES = 30
+
+
+def _parse_date_list(value: str) -> tuple[list[date], list[str]]:
+    """Parseja una llista de dates ISO separades per espais, comes, salts
+    de línia o punts-i-coma. Retorna (dates_vàlides, valors_no_vàlids)."""
+    if not value or not value.strip():
+        return [], []
+    raw = value.replace(",", " ").replace(";", " ").split()
+    valid: list[date] = []
+    invalid: list[str] = []
+    for piece in raw:
+        d = _parse_date_or(piece, None)
+        if d is None:
+            invalid.append(piece)
+        else:
+            valid.append(d)
+    return valid, invalid
+
+
+def _compute_expected_dates(
+    *,
+    repeat_mode: str,
+    expected_date: date,
+    expected_end_date: date | None,
+    skip_weekends: bool,
+    excluded_dates: list[date],
+    concrete_dates: list[date],
+    today: date,
+    max_dates: int = _MAX_SERIES_DATES,
+) -> tuple[list[date], str | None]:
+    """Calcula la llista ordenada de dates per a una visita prevista
+    segons el mode de repetició triat al formulari.
+
+    Retorna (dates, None) en cas d'èxit o ([], missatge_error) si la
+    combinació no és vàlida. Els missatges van directament a la UI."""
+    mode = (repeat_mode or "single").strip().lower()
+
+    if mode == "single":
+        if expected_date < today:
+            return [], "La data ha de ser avui o posterior."
+        return [expected_date], None
+
+    if mode == "range":
+        if not expected_end_date:
+            return [], "Per a un rang cal indicar la 'Data fi'."
+        if expected_end_date < expected_date:
+            return [], "La 'Data fi' ha de ser igual o posterior a la 'Data inici'."
+        if expected_date < today:
+            return [], "La 'Data inici' ha de ser avui o posterior."
+        excluded_set = set(excluded_dates)
+        out: list[date] = []
+        cur = expected_date
+        one_day = timedelta(days=1)
+        while cur <= expected_end_date:
+            if skip_weekends and cur.weekday() >= 5:
+                cur += one_day
+                continue
+            if cur in excluded_set:
+                cur += one_day
+                continue
+            out.append(cur)
+            if len(out) > max_dates:
+                return [], f"Massa dates seleccionades. Màxim permès: {max_dates}."
+            cur += one_day
+        if not out:
+            return [], "El rang seleccionat no conté cap dia (revisa les exclusions)."
+        return out, None
+
+    if mode == "concrete":
+        if not concrete_dates:
+            return [], "Indica almenys una data."
+        seen: set[date] = set()
+        out = []
+        for d in concrete_dates:
+            if d < today:
+                return [], f"Hi ha una data passada: {d.isoformat()}."
+            if d in seen:
+                return [], f"Data duplicada: {d.isoformat()}."
+            seen.add(d)
+            out.append(d)
+        if len(out) > max_dates:
+            return [], f"Massa dates seleccionades. Màxim permès: {max_dates}."
+        out.sort()
+        return out, None
+
+    return [], f"Mode de repetició no reconegut: {repeat_mode}."
+
+
+_CA_MONTHS = [
+    "", "gener", "febrer", "març", "abril", "maig", "juny",
+    "juliol", "agost", "setembre", "octubre", "novembre", "desembre",
+]
+
+
+def _format_dates_human(dates: list[date]) -> str:
+    """Versió compacta per a emails / displays curts:
+      - 1 data → '15/06/2026'
+      - mateixos any+mes → '15, 16 i 17 de juny 2026'
+      - barreja → '15/06, 16/06 i 22/07/2026'
+    """
+    if not dates:
+        return ""
+    if len(dates) == 1:
+        return dates[0].strftime("%d/%m/%Y")
+    same_month = all(d.year == dates[0].year and d.month == dates[0].month for d in dates)
+    if same_month:
+        days = [str(d.day) for d in dates]
+        if len(days) > 2:
+            head = ", ".join(days[:-1])
+            return f"{head} i {days[-1]} de {_CA_MONTHS[dates[0].month]} {dates[0].year}"
+        return f"{days[0]} i {days[1]} de {_CA_MONTHS[dates[0].month]} {dates[0].year}"
+    return ", ".join(d.strftime("%d/%m/%Y") for d in dates)
+
+
 _email_bg_logger = logging.getLogger("app.email.bg")
 
 
@@ -2072,18 +2208,27 @@ async def expected_create(
     visit_reason: str = Form(""),
     notes: str = Form(""),
     notify_recipients: str = Form(""),
+    repeat_mode: str = Form("single"),
+    expected_end_date: str = Form(""),
+    skip_weekends: str = Form(""),
+    excluded_dates: str = Form(""),
+    concrete_dates: str = Form(""),
 ):
     parsed_date = _parse_date_or(expected_date, None)
-    if not parsed_date or not visitor_first_name.strip() or not host_name.strip():
+    parsed_end_date = _parse_date_or(expected_end_date, None) if expected_end_date else None
+    today = datetime.now(timezone.utc).date()
+    excluded_list, excluded_bad = _parse_date_list(excluded_dates)
+    concrete_list, concrete_bad = _parse_date_list(concrete_dates)
+
+    async def _render_form_error(msg: str):
         dept_result = await db.execute(
             select(Department).where(Department.active.is_(True)).order_by(Department.order)
         )
         ctx = _admin_context(admin)
         ctx["departments"] = dept_result.scalars().all()
-        ctx["error"] = "Els camps Nom, Amfitrió i Data són obligatoris."
-        ctx["today_iso"] = datetime.now(timezone.utc).date().isoformat()
+        ctx["error"] = msg
+        ctx["today_iso"] = today.isoformat()
         ctx["default_notify_recipients"] = settings.EXPECTED_NOTIFY_RECIPIENTS
-        # Preservar el que l'usuari ja havia escrit per no haver-ho de teclejar de nou
         ctx["form"] = {
             "visitor_first_name": visitor_first_name,
             "visitor_last_name": visitor_last_name,
@@ -2097,10 +2242,42 @@ async def expected_create(
             "visit_reason": visit_reason,
             "notes": notes,
             "notify_recipients": notify_recipients,
+            "repeat_mode": repeat_mode or "single",
+            "expected_end_date": expected_end_date,
+            "skip_weekends": skip_weekends,
+            "excluded_dates": excluded_dates,
+            "concrete_dates": concrete_dates,
         }
         return templates.TemplateResponse(request, "admin/expected_new.html", ctx)
 
-    item = ExpectedVisit(
+    if not parsed_date or not visitor_first_name.strip() or not host_name.strip():
+        return await _render_form_error("Els camps Nom, Amfitrió i Data són obligatoris.")
+    if excluded_bad:
+        return await _render_form_error(
+            "Format invàlid a 'Excloure dies': " + ", ".join(excluded_bad)
+        )
+    if concrete_bad:
+        return await _render_form_error(
+            "Format invàlid a 'Dies concrets': " + ", ".join(concrete_bad)
+        )
+
+    dates, err = _compute_expected_dates(
+        repeat_mode=repeat_mode,
+        expected_date=parsed_date,
+        expected_end_date=parsed_end_date,
+        skip_weekends=bool(skip_weekends),
+        excluded_dates=excluded_list,
+        concrete_dates=concrete_list,
+        today=today,
+    )
+    if err:
+        return await _render_form_error(err)
+
+    is_series = len(dates) > 1
+    series_id_val = uuid.uuid4() if is_series else None
+    shared_access_code = await generate_unique_access_code(db)
+    parsed_time = _parse_time_or_none(expected_time)
+    base_fields = dict(
         visitor_first_name=visitor_first_name.strip(),
         visitor_last_name=(visitor_last_name or "").strip() or None,
         visitor_company=(visitor_company or "").strip() or None,
@@ -2108,16 +2285,25 @@ async def expected_create(
         visitor_email=(visitor_email or "").strip() or None,
         host_name=host_name.strip(),
         department_id=department_id or None,
-        expected_date=parsed_date,
-        expected_time=_parse_time_or_none(expected_time),
+        expected_time=parsed_time,
         visit_reason=(visit_reason or "").strip() or None,
         notes=(notes or "").strip() or None,
         status="pending",
         created_by_id=admin.id,
-        access_code=await generate_unique_access_code(db),
+        access_code=shared_access_code,
+        series_id=series_id_val,
     )
-    db.add(item)
+
+    items: list[ExpectedVisit] = []
+    for d in dates:
+        it = ExpectedVisit(expected_date=d, **base_fields)
+        db.add(it)
+        items.append(it)
     await db.flush()  # perquè item.id estigui disponible
+
+    # Per a l'email, fem servir la primera fila com a "canònica" del payload
+    # (l'usuari rep un sol email amb totes les dates).
+    canonical = items[0]
 
     # Notificació automàtica si hi ha destinataris (override del form
     # o per defecte del .env). L'email s'envia en background per no
@@ -2133,7 +2319,9 @@ async def expected_create(
                 action="expected_visit_email_skipped",
                 ip_address=request.client.host if request.client else None,
                 detail=json.dumps({
-                    "expected_id": str(item.id),
+                    "expected_id": str(canonical.id),
+                    "series_id": str(series_id_val) if series_id_val else None,
+                    "series_count": len(items) if is_series else None,
                     "reason": "email_backend_not_configured",
                     "recipients": recipients,
                 }),
@@ -2142,11 +2330,11 @@ async def expected_create(
             # _build_email_defaults i _render_expected_email_html accedeixen
             # a item.department (lazy). Cal carregar-la abans del commit
             # perquè la tasca pugui treballar amb un payload ja serialitzat.
-            if item.department_id:
-                await db.refresh(item, attribute_names=["department"])
-            subject, body = _build_email_defaults(item)
-            html_body = _render_expected_email_html(item, subject)
-            email_payload = (recipients, subject, body, html_body, str(item.id))
+            if canonical.department_id:
+                await db.refresh(canonical, attribute_names=["department"])
+            subject, body = _build_email_defaults(canonical, dates_list=dates)
+            html_body = _render_expected_email_html(canonical, subject, dates_list=dates)
+            email_payload = (recipients, subject, body, html_body, str(canonical.id))
 
     await db.commit()
 
@@ -2164,7 +2352,11 @@ async def expected_create(
             audit_ip=request.client.host if request.client else None,
             audit_action_ok="expected_visit_email_sent_auto",
             audit_action_fail="expected_visit_email_failed_auto",
-            audit_detail_extra={"expected_id": expected_id},
+            audit_detail_extra={
+                "expected_id": expected_id,
+                "series_id": str(series_id_val) if series_id_val else None,
+                "series_count": len(items) if is_series else None,
+            },
         ))
 
     return RedirectResponse("/admin/expected", status_code=302)
@@ -2192,7 +2384,10 @@ def _generate_qr_png_bytes(data: str) -> bytes:
     return buffer.getvalue()
 
 
-def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
+def _render_visitor_invitation_html(
+    item: ExpectedVisit,
+    dates_list: list[date] | None = None,
+) -> tuple[str, str]:
     """Renderitza el correu d'invitació al visitant.
     Retorna (subject, html).
 
@@ -2200,9 +2395,18 @@ def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
     i un botó "Pre-registrar-me ara". No s'envia el QR perquè aquesta
     versió simplifica la integració amb Power Automate (sense adjunts
     inline) i el codi és igualment fàcil d'introduir al quiosc.
-    """
+
+    Si `dates_list` té més d'una data, la plantilla mostra la llista
+    completa (cas multi-dia). El codi és sempre un sol valor i el link
+    de pre-registre funciona per a cada dia de la sèrie."""
     full_name = _expected_full_name(item)
-    subject = f"La teva visita a {settings.COMPANY_NAME} · {item.expected_date.strftime('%d/%m/%Y')}"
+    dates = dates_list or [item.expected_date]
+    multi = len(dates) > 1
+    dates_display = _format_dates_human(dates)
+    if multi:
+        subject = f"La teva visita a {settings.COMPANY_NAME} · {len(dates)} dies"
+    else:
+        subject = f"La teva visita a {settings.COMPANY_NAME} · {dates_display}"
     base_url = settings.BASE_URL.rstrip("/")
     preregister_url = f"{base_url}/ca/code/{item.access_code}"
 
@@ -2218,6 +2422,10 @@ def _render_visitor_invitation_html(item: ExpectedVisit) -> tuple[str, str]:
         visit_reason=item.visit_reason,
         access_code=item.access_code,
         preregister_url=preregister_url,
+        dates_list=dates,
+        dates_count=len(dates),
+        dates_display=dates_display,
+        dates_iso=[d.strftime("%d/%m/%Y") for d in dates],
     )
     return subject, html
 
@@ -2244,11 +2452,20 @@ def _build_visitor_invitation_text(item: ExpectedVisit) -> str:
     return "\n".join(parts)
 
 
-def _render_expected_email_html(item: ExpectedVisit, subject: str) -> str:
+def _render_expected_email_html(
+    item: ExpectedVisit,
+    subject: str,
+    dates_list: list[date] | None = None,
+) -> str:
     """Renderitza el cos HTML del correu de notificació amb la plantilla
     Jinja2 dedicada per als emails. Cal que la relació item.department
-    ja estigui carregada (cap accés a BD aquí dins)."""
+    ja estigui carregada (cap accés a BD aquí dins).
+
+    Per a una sèrie (multi-dia) cal passar `dates_list` amb totes les
+    dates de la sèrie; la plantilla renderitzarà la llista de dates en
+    lloc de la data única."""
     full_name = _expected_full_name(item)
+    dates = dates_list or [item.expected_date]
     return templates.get_template("email/expected_created.html").render(
         subject=subject,
         company_name=settings.COMPANY_NAME,
@@ -2261,13 +2478,27 @@ def _render_expected_email_html(item: ExpectedVisit, subject: str) -> str:
         expected_time_display=item.expected_time.strftime("%H:%M") if item.expected_time else None,
         visit_reason=item.visit_reason,
         notes=item.notes,
+        dates_list=dates,
+        dates_count=len(dates),
+        dates_display=_format_dates_human(dates),
+        dates_iso=[d.strftime("%d/%m/%Y") for d in dates],
     )
 
 
-def _build_email_defaults(item: ExpectedVisit) -> tuple[str, str]:
-    """Assumpte i cos prefilats per a la notificació d'una visita prevista."""
+def _build_email_defaults(
+    item: ExpectedVisit,
+    dates_list: list[date] | None = None,
+) -> tuple[str, str]:
+    """Assumpte i cos prefilats per a la notificació d'una visita prevista.
+    Si `dates_list` té més d'una data, l'email reflectirà la sèrie sencera."""
     full_name = _expected_full_name(item)
-    subject = f"Visita prevista: {full_name} el {item.expected_date.strftime('%d/%m/%Y')}"
+    dates = dates_list or [item.expected_date]
+    multi = len(dates) > 1
+    dates_display = _format_dates_human(dates)
+    if multi:
+        subject = f"Visita prevista: {full_name} ({len(dates)} dies)"
+    else:
+        subject = f"Visita prevista: {full_name} el {dates_display}"
 
     lines = [
         "Hola,",
@@ -2283,7 +2514,12 @@ def _build_email_defaults(item: ExpectedVisit) -> tuple[str, str]:
     lines.append(f"Amfitrió: {item.host_name}")
     if item.department:
         lines.append(f"Departament: {item.department.name_ca}")
-    lines.append(f"Data: {item.expected_date.strftime('%d/%m/%Y')}")
+    if multi:
+        lines.append(f"Dies previstos ({len(dates)}):")
+        for d in dates:
+            lines.append(f"  · {d.strftime('%d/%m/%Y')}")
+    else:
+        lines.append(f"Data: {dates_display}")
     if item.expected_time:
         lines.append(f"Hora aproximada: {item.expected_time.strftime('%H:%M')}")
     if item.visit_reason:
@@ -2729,13 +2965,29 @@ async def expected_detail(
     dept_result = await db.execute(
         select(Department).where(Department.active.is_(True)).order_by(Department.order)
     )
-    default_subject, default_body = _build_email_defaults(item)
+
+    # Si forma part d'una sèrie, carrega tots els germans (per al desplegable
+    # del detall i per a l'email default amb totes les dates).
+    series_siblings: list[ExpectedVisit] = []
+    if item.series_id is not None:
+        sib_result = await db.execute(
+            select(ExpectedVisit)
+            .where(ExpectedVisit.series_id == item.series_id)
+            .order_by(ExpectedVisit.expected_date)
+        )
+        series_siblings = list(sib_result.scalars().all())
+
+    series_dates = [s.expected_date for s in series_siblings] if series_siblings else None
+    series_has_pending = any(s.status == "pending" for s in series_siblings)
+    default_subject, default_body = _build_email_defaults(item, dates_list=series_dates)
     default_notify_recipients = (
         item.last_email_recipients or settings.EXPECTED_NOTIFY_RECIPIENTS or ""
     )
 
     ctx = _admin_context(admin)
     ctx["item"] = item
+    ctx["series_siblings"] = series_siblings
+    ctx["series_has_pending"] = series_has_pending
     ctx["departments"] = dept_result.scalars().all()
     ctx["statuses"] = EXPECTED_STATUSES
     ctx["smtp_ready"] = smtp_configured()
@@ -2841,6 +3093,52 @@ async def expected_cancel(
         item.status = "cancelled"
         item.last_updated_by_id = admin.id
         await _log_expected_status_change(db, request, admin, item, old_status, "cancelled")
+        await db.commit()
+    return RedirectResponse("/admin/expected", status_code=302)
+
+
+@router.post("/expected/series/{series_id}/cancel")
+async def expected_series_cancel(
+    series_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_role("admin", "receptionist")),
+):
+    """Cancel·la totes les files PENDENTS d'una sèrie multi-dia. Les
+    que ja són 'arrived' o 'cancelled' es deixen tal com estan (no
+    podem desfer una arribada real). Si es passa un series_id invàlid
+    o sense files pendents, simplement redirigeix a la llista."""
+    try:
+        series_uuid = uuid.UUID(series_id)
+    except ValueError:
+        return RedirectResponse("/admin/expected", status_code=302)
+
+    result = await db.execute(
+        select(ExpectedVisit).where(
+            ExpectedVisit.series_id == series_uuid,
+            ExpectedVisit.status == "pending",
+        )
+    )
+    rows = result.scalars().all()
+    cancelled_count = 0
+    for item in rows:
+        old_status = item.status
+        item.status = "cancelled"
+        item.last_updated_by_id = admin.id
+        await _log_expected_status_change(db, request, admin, item, old_status, "cancelled")
+        cancelled_count += 1
+
+    if cancelled_count:
+        db.add(AuditLog(
+            admin_id=admin.id,
+            visit_id=None,
+            action="expected_visit_series_cancelled",
+            ip_address=request.client.host if request.client else None,
+            detail=json.dumps({
+                "series_id": str(series_uuid),
+                "cancelled_count": cancelled_count,
+            }),
+        ))
         await db.commit()
     return RedirectResponse("/admin/expected", status_code=302)
 

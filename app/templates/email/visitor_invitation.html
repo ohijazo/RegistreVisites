@@ -30,10 +30,16 @@
                 Hola {{ visitor_first_name }},
               </h1>
               <p style="margin:12px 0 0 0; color:#374151; font-size:15px; line-height:1.55;">
-                T'esperem a les nostres instal·lacions
-                el <strong>{{ expected_date_display }}</strong>{% if expected_time_display %}
-                a les <strong>{{ expected_time_display }}</strong>{% endif %}.
-                {% if host_name %}T'atendrà <strong>{{ host_name }}</strong>.{% endif %}
+                {% if dates_count and dates_count > 1 %}
+                  T'esperem a les nostres instal·lacions els <strong>{{ dates_count }} dies</strong> següents{% if expected_time_display %}
+                  (entrada aproximada a les <strong>{{ expected_time_display }}</strong>){% endif %}.
+                  {% if host_name %}T'atendrà <strong>{{ host_name }}</strong>.{% endif %}
+                {% else %}
+                  T'esperem a les nostres instal·lacions
+                  el <strong>{{ expected_date_display }}</strong>{% if expected_time_display %}
+                  a les <strong>{{ expected_time_display }}</strong>{% endif %}.
+                  {% if host_name %}T'atendrà <strong>{{ host_name }}</strong>.{% endif %}
+                {% endif %}
               </p>
             </td>
           </tr>
@@ -74,10 +80,24 @@
                 Detalls de la visita
               </h2>
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px; color:#1f2937;">
+                {% if dates_count and dates_count > 1 %}
+                <tr>
+                  <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; width:40%; color:#6b7280; vertical-align:top;">Dies previstos</td>
+                  <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; font-weight:600;">
+                    {% for d in dates_iso %}
+                      <div style="margin:1px 0;">· {{ d }}</div>
+                    {% endfor %}
+                    <div style="margin-top:6px; font-weight:400; color:#6b7280; font-size:13px;">
+                      El codi d'accés és el mateix per a tots els dies.
+                    </div>
+                  </td>
+                </tr>
+                {% else %}
                 <tr>
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; width:40%; color:#6b7280;">Data</td>
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; font-weight:600;">{{ expected_date_display }}</td>
                 </tr>
+                {% endif %}
                 {% if expected_time_display %}
                 <tr>
                   <td style="padding:8px 0; border-bottom:1px solid #e5e7eb; color:#6b7280;">Hora</td>

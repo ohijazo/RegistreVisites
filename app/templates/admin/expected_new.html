@@ -61,8 +61,39 @@
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 <datalist id="host-suggestions"></datalist>
             </div>
+            {% set repeat_mode = form.get('repeat_mode', 'single') %}
+            <div class="sm:col-span-2 border-t pt-4">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Tipus de visita</label>
+                <div class="flex flex-wrap gap-2" id="repeat-mode-tabs">
+                    <label class="cursor-pointer">
+                        <input type="radio" name="repeat_mode" value="single" class="peer sr-only" {% if repeat_mode == 'single' %}checked{% endif %}>
+                        <span class="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-sm peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 inline-block">Un sol dia</span>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="repeat_mode" value="range" class="peer sr-only" {% if repeat_mode == 'range' %}checked{% endif %}>
+                        <span class="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-sm peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 inline-block">Rang de dies</span>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="repeat_mode" value="concrete" class="peer sr-only" {% if repeat_mode == 'concrete' %}checked{% endif %}>
+                        <span class="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-sm peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 inline-block">Dies concrets</span>
+                    </label>
+                </div>
+                <p class="text-xs text-gray-600 mt-2" data-repeat-hint>
+                    {% if repeat_mode == 'range' %}
+                        Es crearà una entrada per cada dia del rang. Tots compartiran el mateix codi d'accés.
+                    {% elif repeat_mode == 'concrete' %}
+                        Indica les dates exactes en què vindrà el visitant. Tots els dies comparteixen el mateix codi.
+                    {% else %}
+                        Una sola visita programada per al dia indicat.
+                    {% endif %}
+                </p>
+            </div>
+
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Data <span class="text-red-500">*</span></label>
+                <label class="block text-sm font-semibold text-gray-700 mb-1" data-date-label>
+                    {% if repeat_mode == 'range' %}Data inici{% elif repeat_mode == 'concrete' %}Primera data{% else %}Data{% endif %}
+                    <span class="text-red-500">*</span>
+                </label>
                 <input type="date" name="expected_date" required
                        min="{{ today_iso }}"
                        value="{{ form.get('expected_date', today_iso) }}"
@@ -73,6 +104,43 @@
                 <input type="time" name="expected_time"
                        value="{{ form.get('expected_time', '') }}"
                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 {% if repeat_mode != 'range' %}hidden{% endif %}" data-range-fields>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Data fi <span class="text-red-500">*</span></label>
+                    <input type="date" name="expected_end_date"
+                           min="{{ today_iso }}"
+                           value="{{ form.get('expected_end_date', '') }}"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="flex items-end">
+                    <label class="inline-flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="skip_weekends" value="on"
+                               {% if form.get('skip_weekends', 'on') %}checked{% endif %}>
+                        Saltar caps de setmana
+                    </label>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Excloure dies (opcional)</label>
+                    <input type="text" name="excluded_dates"
+                           value="{{ form.get('excluded_dates', '') }}"
+                           placeholder="ex: 2026-07-04, 2026-07-05"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">
+                    <p class="text-xs text-gray-600 mt-1">Dates en format YYYY-MM-DD separades per comes o espais (útil per festius dins el rang).</p>
+                </div>
+            </div>
+
+            <div class="sm:col-span-2 {% if repeat_mode != 'concrete' %}hidden{% endif %}" data-concrete-fields>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Dies concrets <span class="text-red-500">*</span></label>
+                <input type="text" name="concrete_dates"
+                       value="{{ form.get('concrete_dates', '') }}"
+                       placeholder="ex: 2026-07-01, 2026-07-03, 2026-07-08"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">
+                <p class="text-xs text-gray-600 mt-1">
+                    Dates en format YYYY-MM-DD separades per comes o espais. Es crearà una entrada per cada dia llistat,
+                    a més de la "Primera data" si la inclous.
+                </p>
             </div>
             <div class="sm:col-span-2">
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Departament</label>
@@ -140,6 +208,47 @@
             datalist.appendChild(opt);
         });
     } catch (e) {}
+})();
+
+// Toggle dels blocs segons el mode de repetició + actualització del label de la data.
+(function() {
+    var tabs = document.getElementById('repeat-mode-tabs');
+    if (!tabs) return;
+    var rangeFields = document.querySelector('[data-range-fields]');
+    var concreteFields = document.querySelector('[data-concrete-fields]');
+    var dateLabel = document.querySelector('[data-date-label]');
+    var hint = document.querySelector('[data-repeat-hint]');
+    var endDateInput = rangeFields ? rangeFields.querySelector('[name="expected_end_date"]') : null;
+    var concreteInput = concreteFields ? concreteFields.querySelector('[name="concrete_dates"]') : null;
+
+    function apply(mode) {
+        if (rangeFields) rangeFields.classList.toggle('hidden', mode !== 'range');
+        if (concreteFields) concreteFields.classList.toggle('hidden', mode !== 'concrete');
+        if (dateLabel) {
+            var prefix = mode === 'range' ? 'Data inici' : (mode === 'concrete' ? 'Primera data' : 'Data');
+            dateLabel.firstChild.nodeValue = prefix + ' ';
+        }
+        if (hint) {
+            if (mode === 'range') {
+                hint.textContent = "Es crearà una entrada per cada dia del rang. Tots compartiran el mateix codi d'accés.";
+            } else if (mode === 'concrete') {
+                hint.textContent = "Indica les dates exactes en què vindrà el visitant. Tots els dies comparteixen el mateix codi.";
+            } else {
+                hint.textContent = "Una sola visita programada per al dia indicat.";
+            }
+        }
+        if (endDateInput) endDateInput.required = (mode === 'range');
+        if (concreteInput) concreteInput.required = (mode === 'concrete');
+    }
+
+    tabs.querySelectorAll('input[type="radio"][name="repeat_mode"]').forEach(function(r) {
+        r.addEventListener('change', function() {
+            if (r.checked) apply(r.value);
+        });
+    });
+
+    var checked = tabs.querySelector('input[type="radio"][name="repeat_mode"]:checked');
+    if (checked) apply(checked.value);
 })();
 
 // Feedback visual als formularis amb data-loading-btn-text: el botó es

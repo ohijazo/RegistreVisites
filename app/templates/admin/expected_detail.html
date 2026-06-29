@@ -181,6 +181,59 @@
     </div>
     {% endif %}
 
+    {% if series_siblings and series_siblings|length > 1 %}
+    <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-5 mb-4">
+        <div class="flex items-start justify-between flex-wrap gap-3 mb-3">
+            <div>
+                <h2 class="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 015.656 0l1.414 1.414a4 4 0 010 5.656l-3 3a4 4 0 01-5.656 0L11 19.5M10.172 13.828a4 4 0 01-5.656 0l-1.414-1.414a4 4 0 010-5.656l3-3a4 4 0 015.656 0L13 4.5"/>
+                    </svg>
+                    Sèrie de visites · {{ series_siblings|length }} dies
+                </h2>
+                <p class="text-xs text-indigo-700 mt-1">
+                    Aquest visitant té previst venir varis dies. Tots comparteixen el mateix codi d'accés.
+                </p>
+            </div>
+            {% if is_editor and series_has_pending %}
+            <form method="POST" action="/admin/expected/series/{{ item.series_id }}/cancel"
+                  onsubmit="return confirm('Cancel·lar TOTS els dies pendents de la sèrie? Les visites ja arribades no es toquen.');">
+                {% include "_csrf.html" %}
+                <button type="submit" class="text-xs bg-white hover:bg-gray-50 border border-indigo-300 text-indigo-800 px-3 py-1.5 rounded-lg font-medium">
+                    Cancel·lar tota la sèrie
+                </button>
+            </form>
+            {% endif %}
+        </div>
+        <ul class="divide-y divide-indigo-100 bg-white rounded-lg border border-indigo-100">
+            {% for s in series_siblings %}
+            <li class="flex items-center justify-between px-3 py-2 text-sm {% if s.id == item.id %}bg-indigo-50/60{% endif %}">
+                <div class="flex items-center gap-3">
+                    <span class="font-mono text-gray-700">{{ s.expected_date | local('%d/%m/%Y') }}</span>
+                    {% if s.id == item.id %}
+                    <span class="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded">aquest dia</span>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if s.status == 'pending' %}
+                    <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Pendent</span>
+                    {% elif s.status == 'arrived' %}
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Arribada</span>
+                    {% elif s.status == 'cancelled' %}
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Cancel·lada</span>
+                    {% elif s.status == 'no_show' %}
+                    <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">No presentada</span>
+                    {% endif %}
+                    {% if s.id != item.id %}
+                    <a href="/admin/expected/{{ s.id }}" class="text-xs text-blue-600 hover:text-blue-800 hover:underline">Veure</a>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <!-- ─── Mode lectura ─── -->
     <div id="view-mode" class="bg-white rounded-xl shadow-sm p-6">
         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">

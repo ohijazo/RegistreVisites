@@ -135,6 +135,16 @@
                         {% if item.visitor_phone %}
                         <a href="tel:{{ item.visitor_phone }}" class="ml-1 text-blue-500 hover:text-blue-700" title="Trucar a {{ item.visitor_phone }}">📞</a>
                         {% endif %}
+                        {% set sinfo = series_info.get(item.id|string) %}
+                        {% if sinfo %}
+                        <span class="ml-1 inline-flex items-center gap-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded"
+                              title="Visita de varis dies — dia {{ sinfo[0] }} de {{ sinfo[1] }}. Comparteix codi d'accés.">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 015.656 0l1.414 1.414a4 4 0 010 5.656l-3 3a4 4 0 01-5.656 0L11 19.5M10.172 13.828a4 4 0 01-5.656 0l-1.414-1.414a4 4 0 010-5.656l3-3a4 4 0 015.656 0L13 4.5"/>
+                            </svg>
+                            {{ sinfo[0] }}/{{ sinfo[1] }}
+                        </span>
+                        {% endif %}
                     </td>
                     <td class="px-5 py-3 text-gray-600">{{ item.visitor_company or '—' }}</td>
                     <td class="px-5 py-3 text-gray-600">{{ item.host_name }}</td>

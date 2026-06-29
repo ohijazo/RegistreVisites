@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, String, Boolean, Date, DateTime, Float, Text, Time,
-    ForeignKey, LargeBinary, Integer,
+    ForeignKey, LargeBinary, Integer, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.orm import relationship
@@ -158,8 +158,18 @@ class ExpectedVisit(Base):
     visit_id = Column(UUID(as_uuid=True), ForeignKey("visits.id"), nullable=True)
     visit = relationship("Visit", foreign_keys=[visit_id])
 
-    # Codi d'accés (8 chars) per al fast-track al quiosc o QR de pre-registre
-    access_code = Column(String(16), unique=True, index=True)
+    # Codi d'accés (8 chars) per al fast-track al quiosc o QR de pre-registre.
+    # Per a sèries multi-dia, totes les files de la sèrie comparteixen el
+    # mateix codi (unicitat per (codi, dia) via UniqueConstraint a sota).
+    access_code = Column(String(16), index=True)
+
+    # Identificador de sèrie: si està a NULL, és una visita d'un sol dia.
+    # Si està set, agrupa N files (una per dia) que comparteixen access_code.
+    series_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("access_code", "expected_date", name="uq_expected_code_date"),
+    )
 
 
 class BlockedVisitor(Base):
